@@ -1,0 +1,101 @@
+# LinkedIn Agent Configuration
+# Copy this file to config.yaml and fill in your credentials
+
+database:
+  driver: sqlite
+  dsn: "./data/linkedin.db"
+  # For PostgreSQL:
+  # driver: postgres
+  # dsn: "host=localhost user=postgres password=secret dbname=linkedin port=5432 sslmode=disable"
+
+linkedin:
+  client_id: ""           # From LinkedIn Developer Portal
+  client_secret: ""       # From LinkedIn Developer Portal
+  redirect_uri: "http://localhost:8080/callback"
+  scopes:
+    - "w_member_social"
+    - "r_liteprofile"
+
+anthropic:
+  api_key: ""             # Or set LINKEDIN_ANTHROPIC_API_KEY env var
+  model: "claude-sonnet-4-20250514"
+  max_tokens: 4096
+  temperature: 0.7
+
+sources:
+  newsapi:
+    enabled: true
+    api_key: ""           # Or set LINKEDIN_SOURCES_NEWSAPI_API_KEY
+    categories:
+      - business
+      - technology
+    language: "en"
+    fetch_interval: "2h"
+
+  rss:
+    enabled: true
+    feeds:
+      - name: "Harvard Business Review"
+        url: "https://hbr.org/feed"
+      - name: "Forbes Leadership"
+        url: "https://www.forbes.com/leadership/feed/"
+      - name: "Inc.com"
+        url: "https://www.inc.com/rss"
+      - name: "Entrepreneur"
+        url: "https://www.entrepreneur.com/feed"
+    fetch_interval: "30m"
+
+  twitter:
+    enabled: false
+    bearer_token: ""      # Or set LINKEDIN_SOURCES_TWITTER_BEARER_TOKEN
+    search_queries:
+      - "#leadership"
+      - "#businessgrowth"
+      - "#entrepreneurship"
+    fetch_interval: "1h"
+
+  reddit:
+    enabled: true
+    client_id: ""
+    client_secret: ""
+    subreddits:
+      - "entrepreneur"
+      - "leadership"
+      - "startups"
+      - "smallbusiness"
+    fetch_interval: "1h"
+
+  custom:
+    enabled: true
+    keywords:
+      - "leadership trends"
+      - "management best practices"
+      - "career development"
+      - "productivity hacks"
+      - "business growth strategies"
+
+scheduler:
+  discovery_cron: "0 */2 * * *"    # Every 2 hours
+  publish_cron: "0 9,14 * * 1-5"   # 9am and 2pm, Mon-Fri
+  cleanup_cron: "0 0 * * 0"        # Weekly cleanup on Sunday
+
+rate_limit:
+  linkedin_requests_per_day: 100
+  anthropic_requests_per_minute: 10
+  source_requests_per_hour: 60
+
+logging:
+  level: "info"            # debug, info, warn, error
+  format: "console"        # json or console
+  output: "stdout"         # stdout or file path
+
+publishing:
+  auto_approve: false      # Set to true for fully autonomous mode
+  max_posts_per_day: 3
+  min_score_threshold: 70  # Minimum AI score to consider
+  default_post_type: "text"
+  brand_voice: |
+    Professional, insightful, and engaging.
+    Focus on actionable insights for business leaders.
+    Use clear language, avoid jargon.
+    Include a thought-provoking question or call-to-action.
