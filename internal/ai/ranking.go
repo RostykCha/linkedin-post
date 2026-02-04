@@ -152,8 +152,13 @@ func postProcessContent(content string) string {
 	header := "Tech Insights from Ros | " + today
 	footer := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
 
-	// Check if header is present
-	if !strings.HasPrefix(content, "Tech Insights from Ros") {
+	// Always ensure correct header with today's date
+	if strings.HasPrefix(content, "Tech Insights from Ros") {
+		// Replace the first line (header) with correct date
+		if idx := strings.Index(content, "\n"); idx != -1 {
+			content = header + content[idx:]
+		}
+	} else {
 		content = header + "\n\n" + content
 	}
 
