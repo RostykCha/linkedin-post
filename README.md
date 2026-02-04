@@ -17,6 +17,26 @@ An autonomous AI-powered system for LinkedIn content automation, built with Go a
 - **Background Scheduler**: Runs autonomous discovery and publishing cycles
 
 ## Quick Start
+# Discovery
+./linkedin-agent discover run              # Discover topics now (instead of waiting for cron)
+
+# Topics
+./linkedin-agent topics list               # List all discovered topics
+./linkedin-agent topics list --status=pending --min-score=70
+
+# Publishing  
+./linkedin-agent publish generate <topic-id>   # Generate post for a topic
+./linkedin-agent publish now <post-id>         # Publish immediately
+./linkedin-agent publish auto                  # Auto-publish top topics
+
+# OAuth (for debugging)
+./linkedin-agent oauth status              # Check token status
+./linkedin-agent oauth export              # Export current tokens
+
+# Tracker
+./linkedin-agent tracker sync-topics       # Sync topics to Google Sheets
+./linkedin-agent tracker sync-posts        # Sync posts to Google Sheets
+
 
 ### 1. Configure API Keys
 

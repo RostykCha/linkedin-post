@@ -232,9 +232,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sources.custom.enabled", true)
 
 	// Scheduler defaults
-	v.SetDefault("scheduler.discovery_cron", "0 */2 * * *")    // Every 2 hours
-	v.SetDefault("scheduler.publish_cron", "0 9,14 * * 1-5")   // 9am and 2pm, Mon-Fri
-	v.SetDefault("scheduler.cleanup_cron", "0 0 * * 0")        // Weekly cleanup
+	v.SetDefault("scheduler.discovery_cron", "0 */2 * * *")  // Every 2 hours
+	v.SetDefault("scheduler.publish_cron", "0 8 * * *")      // 8am daily - optimal LinkedIn engagement
+	v.SetDefault("scheduler.cleanup_cron", "0 0 * * 0")      // Weekly cleanup
 
 	// Rate limit defaults
 	v.SetDefault("rate_limit.linkedin_requests_per_day", 100)
