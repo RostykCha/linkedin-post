@@ -31,6 +31,8 @@ data/
 
 # Config with secrets
 configs/config.local.yaml
+configs/google-credentials.json
+configs/*-credentials.json
 .env
 .env.local
 
