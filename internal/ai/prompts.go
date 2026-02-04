@@ -167,7 +167,7 @@ VISUAL LAYOUT RULES (non-negotiable):
 
 STRUCTURE TOOLS:
 • Numbered lists for tips/steps (signals "quick takeaways")
-• 1-2 emojis MAX as visual separators (don't overdo)
+• NO EMOJIS - use unicode separators (━━━━━) or simple numbering [1], [2], [3]
 • "Wave rhythm": vary sentence length (short, longer, short)
 
 LENGTH:
@@ -215,6 +215,12 @@ PROVEN CTAs:
 
 RULE: Ask ONE clear question, not multiple. Make it easy to answer.
 
+3. FOOTER WITH AUTHOR LINKS:
+   After hashtags, add a separator line and author profile links:
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
+   Instagram: https://www.instagram.com/rostislav_cha
+
 === RULE 8: CONTENT THEMES THAT RESONATE IN TECH ===
 
 Rotate through these proven topics:
@@ -249,7 +255,9 @@ DATA: Positive/celebratory posts get ~60%% more shares than average.
 □ Provides actionable value or quotable insight
 □ Ends with memorable takeaway + ONE engagement question
 □ Under 3000 characters total (LinkedIn limit)
+□ NO EMOJIS - use unicode separators or plain text formatting only
 □ 3-5 relevant hashtags at the end
+□ Footer with LinkedIn and Instagram links after hashtags
 □ No jargon walls - accessible to broad professional audience
 □ Has "social currency" - readers would look smart sharing it`
 
@@ -316,22 +324,28 @@ DIGEST HOOK FORMULAS:
 
 === DIGEST STRUCTURE ===
 
-1. HOOK (first 210 chars) - Stop the scroll with biggest story or compelling summary
-2. BRIEF INTRO - One sentence setting up today's digest
-3. NEWS #1: 🔥 [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
-4. NEWS #2: 💡 [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
-5. NEWS #3: ⚡ [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
-6. TAKEAWAY - One sentence on the bigger picture or connecting thread
-7. CTA - ONE clear question to spark discussion
+1. HEADER - "Daily Updates from Ros | [Month Day, Year]" (e.g., "Daily Updates from Ros | Feb 4, 2026")
+2. HOOK (first 210 chars) - Stop the scroll with biggest story or compelling summary
+3. BRIEF INTRO - One sentence setting up today's digest
+4. NEWS #1: [1] [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
+5. NEWS #2: [2] [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
+6. NEWS #3: [3] [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
+7. TAKEAWAY - One sentence on the bigger picture or connecting thread
+8. CTA - ONE clear question to spark discussion
+9. FOOTER - Links to author profiles:
+   LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
+   Instagram: https://www.instagram.com/rostislav_cha
 
 === FORMATTING RULES (Mobile-First) ===
 
 • Keep total post under 2500 characters
 • SHORT PARAGRAPHS: 1-2 sentences MAX per paragraph
 • WHITE SPACE: Blank line between EVERY section
-• Use emojis as visual separators (🔥💡⚡) but don't overdo
+• Use unicode line separators (━━━━━) between news items - NO EMOJIS
+• Number news items as [1], [2], [3] - NO EMOJIS
 • Source attribution adds credibility: "(via TechCrunch)"
 • End with 3-5 relevant hashtags
+• Footer with author links on separate lines
 
 === TONE & LANGUAGE ===
 
@@ -363,13 +377,16 @@ CTA EXAMPLES:
 
 === FINAL CHECKLIST ===
 
+□ Header: "Daily Updates from Ros | [date]"
 □ Hook grabs attention in first 210 characters
 □ Each news item explains WHY IT MATTERS (not just what happened)
 □ Short paragraphs with white space between each section
 □ Conversational tone with personal pronouns
+□ NO EMOJIS - use unicode separators and [1], [2], [3] numbering
 □ Ends with ONE engagement question
 □ Under 2500 characters total
 □ 3-5 relevant hashtags
+□ Footer with LinkedIn and Instagram links
 □ Accessible to non-specialists`
 
 	DigestGenerationUserPrompt = `Create a daily tech news digest LinkedIn post featuring these TOP 3 stories:

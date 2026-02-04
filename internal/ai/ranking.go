@@ -4,9 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/linkedin-agent/internal/models"
 )
+
+// stripMarkdownCodeBlock removes markdown code block delimiters from AI responses
+func stripMarkdownCodeBlock(response string) string {
+	response = strings.TrimSpace(response)
+	// Check for ```json or ``` at the start
+	if strings.HasPrefix(response, "```json") {
+		response = strings.TrimPrefix(response, "```json")
+	} else if strings.HasPrefix(response, "```") {
+		response = strings.TrimPrefix(response, "```")
+	}
+	// Check for ``` at the end
+	if strings.HasSuffix(response, "```") {
+		response = strings.TrimSuffix(response, "```")
+	}
+	return strings.TrimSpace(response)
+}
 
 // TopicRanking represents the AI's analysis of a topic
 type TopicRanking struct {
@@ -42,7 +59,7 @@ func (c *Client) RankTopic(ctx context.Context, topic *models.RawTopic) (*TopicR
 	}
 
 	var ranking TopicRanking
-	if err := json.Unmarshal([]byte(response), &ranking); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &ranking); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).
@@ -91,7 +108,7 @@ func (c *Client) RankTopics(ctx context.Context, topics []*models.RawTopic) ([]*
 	}
 
 	var batchResponse BatchRankingResponse
-	if err := json.Unmarshal([]byte(response), &batchResponse); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &batchResponse); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).
@@ -147,7 +164,7 @@ func (c *Client) GenerateContent(ctx context.Context, topic *models.Topic, brand
 	}
 
 	var content GeneratedContent
-	if err := json.Unmarshal([]byte(response), &content); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &content); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).
@@ -181,7 +198,7 @@ func (c *Client) GeneratePoll(ctx context.Context, topic *models.Topic, brandVoi
 	}
 
 	var poll GeneratedPoll
-	if err := json.Unmarshal([]byte(response), &poll); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &poll); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).
@@ -212,7 +229,7 @@ func (c *Client) ExpandKeyword(ctx context.Context, keyword string) ([]*Expanded
 	var result struct {
 		Topics []*ExpandedTopic `json:"topics"`
 	}
-	if err := json.Unmarshal([]byte(response), &result); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &result); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).
@@ -258,7 +275,7 @@ func (c *Client) GenerateDigest(ctx context.Context, topics []DigestTopic, brand
 	}
 
 	var digest GeneratedDigest
-	if err := json.Unmarshal([]byte(response), &digest); err != nil {
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &digest); err != nil {
 		c.log.Error().
 			Err(err).
 			Str("response", response).

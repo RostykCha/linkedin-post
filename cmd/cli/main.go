@@ -178,6 +178,7 @@ func publishCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(publishGenerateCmd())
+	cmd.AddCommand(publishDigestCmd())
 	cmd.AddCommand(publishNowCmd())
 	cmd.AddCommand(publishScheduleCmd())
 	cmd.AddCommand(publishApproveCmd())
@@ -246,6 +247,73 @@ func publishGenerateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&postType, "type", "text", "Post type: text or poll")
 	cmd.Flags().BoolVar(&preview, "preview", false, "Preview only, don't save")
 	cmd.MarkFlagRequired("topic-id")
+
+	return cmd
+}
+
+func publishDigestCmd() *cobra.Command {
+	var minScore float64
+
+	cmd := &cobra.Command{
+		Use:   "digest",
+		Short: "Generate a daily digest post from top 3 topics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			limiter := ratelimit.NewDefaultLimiter()
+			aiClient := ai.NewClient(cfg.Anthropic, limiter, log)
+
+			// Get top 3 pending topics by score
+			filter := storage.TopicFilter{
+				MinScore:  &minScore,
+				Limit:     3,
+				OrderBy:   "ai_score",
+				OrderDesc: true,
+			}
+			pendingStatus := models.TopicStatusPending
+			filter.Status = &pendingStatus
+
+			topics, err := repo.ListTopics(ctx, filter)
+			if err != nil {
+				return fmt.Errorf("failed to get topics: %w", err)
+			}
+
+			if len(topics) < 3 {
+				return fmt.Errorf("need at least 3 pending topics with score >= %.0f, found %d", minScore, len(topics))
+			}
+
+			// Convert to digest topics
+			digestTopics := make([]ai.DigestTopic, 3)
+			for i, t := range topics[:3] {
+				digestTopics[i] = ai.DigestTopic{
+					Title:       t.Title,
+					Description: t.Description,
+					Source:      t.SourceName,
+				}
+			}
+
+			fmt.Println("Generating digest from top 3 topics:")
+			for i, t := range digestTopics {
+				fmt.Printf("  [%d] %s (%s)\n", i+1, t.Title, t.Source)
+			}
+			fmt.Println()
+
+			// Generate digest
+			digest, err := aiClient.GenerateDigest(ctx, digestTopics, cfg.Publishing.BrandVoice)
+			if err != nil {
+				return fmt.Errorf("failed to generate digest: %w", err)
+			}
+
+			fmt.Printf("=== Daily Digest ===\n\n%s\n", digest.Content)
+			if len(digest.Hashtags) > 0 {
+				fmt.Printf("\nHashtags: %v\n", digest.Hashtags)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().Float64Var(&minScore, "min-score", 70, "Minimum topic score")
 
 	return cmd
 }

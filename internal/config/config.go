@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -142,6 +143,10 @@ type TrackerConfig struct {
 
 // Load loads configuration from file and environment variables
 func Load(configPath string) (*Config, error) {
+	// Load .env file if present (ignore errors if not found)
+	_ = godotenv.Load()
+	_ = godotenv.Load(".env.local")
+
 	v := viper.New()
 
 	// Set defaults
@@ -167,6 +172,17 @@ func Load(configPath string) (*Config, error) {
 	// Environment variables
 	v.SetEnvPrefix("LINKEDIN")
 	v.AutomaticEnv()
+
+	// Explicit bindings for nested keys (Viper doesn't auto-bind underscored nested keys)
+	v.BindEnv("anthropic.api_key", "LINKEDIN_ANTHROPIC_API_KEY")
+	v.BindEnv("linkedin.client_id", "LINKEDIN_LINKEDIN_CLIENT_ID")
+	v.BindEnv("linkedin.client_secret", "LINKEDIN_LINKEDIN_CLIENT_SECRET")
+	v.BindEnv("linkedin.access_token", "LINKEDIN_LINKEDIN_ACCESS_TOKEN")
+	v.BindEnv("linkedin.refresh_token", "LINKEDIN_LINKEDIN_REFRESH_TOKEN")
+	v.BindEnv("database.driver", "LINKEDIN_DATABASE_DRIVER")
+	v.BindEnv("database.dsn", "LINKEDIN_DATABASE_DSN")
+	v.BindEnv("tracker.spreadsheet_id", "LINKEDIN_TRACKER_SPREADSHEET_ID")
+	v.BindEnv("tracker.credentials_file", "LINKEDIN_TRACKER_CREDENTIALS_FILE")
 
 	// Read config file (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
