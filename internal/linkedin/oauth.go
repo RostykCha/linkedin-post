@@ -154,6 +154,43 @@ func (m *OAuthManager) GetTokenStatus(ctx context.Context) (bool, time.Time, err
 	return !token.IsExpired(), token.ExpiresAt, nil
 }
 
+// ImportTokenFromEnv imports OAuth token from environment variables if database is empty
+func (m *OAuthManager) ImportTokenFromEnv(ctx context.Context, accessToken, refreshToken, expiresAt string) error {
+	if accessToken == "" {
+		return nil // No env token configured
+	}
+
+	// Check if valid token already exists in DB
+	existing, err := m.repository.GetToken(ctx, "linkedin")
+	if err == nil && existing != nil && existing.ExpiresAt.After(time.Now()) {
+		m.log.Debug().Msg("Valid token exists in database, skipping env import")
+		return nil
+	}
+
+	// Parse expiration time
+	expiry, err := time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		expiry = time.Now().Add(60 * 24 * time.Hour) // Default 60 days
+	}
+
+	token := &models.OAuthToken{
+		Provider:     "linkedin",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+		ExpiresAt:    expiry,
+	}
+
+	if err := m.repository.SaveToken(ctx, token); err != nil {
+		return fmt.Errorf("failed to save imported token: %w", err)
+	}
+
+	m.log.Info().
+		Time("expires_at", expiry).
+		Msg("OAuth token imported from environment variables")
+	return nil
+}
+
 // StartOAuthServer starts a temporary HTTP server for OAuth callback
 func (m *OAuthManager) StartOAuthServer(ctx context.Context, port int) (string, error) {
 	state, err := GenerateState()

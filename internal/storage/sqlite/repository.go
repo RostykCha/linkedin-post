@@ -124,6 +124,19 @@ func (r *Repository) ListTopics(ctx context.Context, filter storage.TopicFilter)
 	return topics, nil
 }
 
+func (r *Repository) GetTopTopics(ctx context.Context, limit int, minScore float64) ([]*models.Topic, error) {
+	var topics []*models.Topic
+	// Get top topics by score that are approved and not yet used
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND ai_score >= ?", models.TopicStatusApproved, minScore).
+		Order("ai_score DESC").
+		Limit(limit).
+		Find(&topics).Error; err != nil {
+		return nil, err
+	}
+	return topics, nil
+}
+
 func (r *Repository) UpdateTopic(ctx context.Context, topic *models.Topic) error {
 	return r.db.WithContext(ctx).Save(topic).Error
 }

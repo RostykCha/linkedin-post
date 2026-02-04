@@ -14,6 +14,7 @@ type Repository interface {
 	GetTopicByID(ctx context.Context, id uint) (*models.Topic, error)
 	GetTopicByExternalID(ctx context.Context, externalID string) (*models.Topic, error)
 	ListTopics(ctx context.Context, filter TopicFilter) ([]*models.Topic, error)
+	GetTopTopics(ctx context.Context, limit int, minScore float64) ([]*models.Topic, error)
 	UpdateTopic(ctx context.Context, topic *models.Topic) error
 	DeleteTopic(ctx context.Context, id uint) error
 

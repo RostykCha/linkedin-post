@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./configs/config.local.yaml:/app/configs/config.yaml:ro
+      - ./configs/google-credentials.json:/app/configs/google-credentials.json:ro
     healthcheck:
       test: ["CMD", "pgrep", "-f", "linkedin-scheduler"]
       interval: 30s
@@ -23,6 +24,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./configs/config.local.yaml:/app/configs/config.yaml:ro
+      - ./configs/google-credentials.json:/app/configs/google-credentials.json:ro
     entrypoint: ["./linkedin-agent"]
     command: ["--help"]
 

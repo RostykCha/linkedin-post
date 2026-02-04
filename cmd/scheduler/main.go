@@ -20,6 +20,7 @@ import (
 	"github.com/linkedin-agent/internal/source/rss"
 	"github.com/linkedin-agent/internal/storage"
 	"github.com/linkedin-agent/internal/storage/sqlite"
+	"github.com/linkedin-agent/internal/tracker"
 	"github.com/linkedin-agent/pkg/logger"
 	"github.com/linkedin-agent/pkg/ratelimit"
 )
@@ -95,11 +96,39 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 
 	// Initialize LinkedIn client
 	oauthManager := linkedin.NewOAuthManager(cfg.LinkedIn, repo, log)
+
+	// Import token from environment if configured (for headless deployment)
+	if err := oauthManager.ImportTokenFromEnv(
+		context.Background(),
+		cfg.LinkedIn.AccessToken,
+		cfg.LinkedIn.RefreshToken,
+		cfg.LinkedIn.TokenExpiresAt,
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to import token from environment")
+	}
+
 	linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
 
 	// Create agents
 	discoveryAgent := discovery.NewAgent(sourceManager, aiClient, repo, log)
 	publisherAgent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
+
+	// Set up tracker if enabled
+	if cfg.Tracker.Enabled {
+		t, err := tracker.NewSheetsTracker(tracker.Config{
+			Enabled:            cfg.Tracker.Enabled,
+			SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+			SheetName:          cfg.Tracker.SheetName,
+			CredentialsFile:    cfg.Tracker.CredentialsFile,
+			ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+		}, log)
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to create Google Sheets tracker")
+		} else if t != nil {
+			publisherAgent.SetTracker(t)
+			log.Info().Msg("Google Sheets tracker enabled")
+		}
+	}
 
 	// Create cron scheduler
 	c := cron.New(cron.WithLogger(cronLogger{log}))

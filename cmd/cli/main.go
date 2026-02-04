@@ -20,6 +20,7 @@ import (
 	"github.com/linkedin-agent/internal/source/rss"
 	"github.com/linkedin-agent/internal/storage"
 	"github.com/linkedin-agent/internal/storage/sqlite"
+	"github.com/linkedin-agent/internal/tracker"
 	"github.com/linkedin-agent/pkg/logger"
 	"github.com/linkedin-agent/pkg/ratelimit"
 )
@@ -49,6 +50,7 @@ engaging content to LinkedIn using Claude AI.`,
 	rootCmd.AddCommand(oauthCmd())
 	rootCmd.AddCommand(topicsCmd())
 	rootCmd.AddCommand(postsCmd())
+	rootCmd.AddCommand(trackerCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -200,6 +202,22 @@ func publishGenerateCmd() *cobra.Command {
 
 			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
 
+			// Set up tracker if enabled
+			if cfg.Tracker.Enabled {
+				t, err := tracker.NewSheetsTracker(tracker.Config{
+					Enabled:            cfg.Tracker.Enabled,
+					SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+					SheetName:          cfg.Tracker.SheetName,
+					CredentialsFile:    cfg.Tracker.CredentialsFile,
+					ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+				}, log)
+				if err != nil {
+					log.Warn().Err(err).Msg("Failed to create tracker")
+				} else if t != nil {
+					agent.SetTracker(t)
+				}
+			}
+
 			pType := models.PostTypeText
 			if postType == "poll" {
 				pType = models.PostTypePoll
@@ -251,6 +269,22 @@ func publishNowCmd() *cobra.Command {
 			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
 
 			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
+
+			// Set up tracker if enabled
+			if cfg.Tracker.Enabled {
+				t, err := tracker.NewSheetsTracker(tracker.Config{
+					Enabled:            cfg.Tracker.Enabled,
+					SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+					SheetName:          cfg.Tracker.SheetName,
+					CredentialsFile:    cfg.Tracker.CredentialsFile,
+					ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+				}, log)
+				if err != nil {
+					log.Warn().Err(err).Msg("Failed to create tracker")
+				} else if t != nil {
+					agent.SetTracker(t)
+				}
+			}
 
 			result, err := agent.Publish(ctx, uint(postID))
 			if err != nil {
@@ -353,6 +387,7 @@ func oauthCmd() *cobra.Command {
 
 	cmd.AddCommand(oauthLoginCmd())
 	cmd.AddCommand(oauthStatusCmd())
+	cmd.AddCommand(oauthExportCmd())
 	return cmd
 }
 
@@ -414,6 +449,28 @@ func oauthStatusCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func oauthExportCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "export",
+		Short: "Export OAuth token for environment variables (headless deployment)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			token, err := repo.GetToken(ctx, "linkedin")
+			if err != nil {
+				return fmt.Errorf("no token found - run 'oauth login' first: %w", err)
+			}
+
+			fmt.Println("# LinkedIn OAuth Token - Copy these to your environment variables:")
+			fmt.Printf("LINKEDIN_ACCESS_TOKEN=%s\n", token.AccessToken)
+			fmt.Printf("LINKEDIN_REFRESH_TOKEN=%s\n", token.RefreshToken)
+			fmt.Printf("LINKEDIN_TOKEN_EXPIRES_AT=%s\n", token.ExpiresAt.Format(time.RFC3339))
+
+			return nil
+		},
+	}
 }
 
 // ============ TOPICS COMMANDS ============
@@ -581,4 +638,221 @@ func postsQueueCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+// ============ TRACKER COMMANDS ============
+
+func trackerCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tracker",
+		Short: "Google Sheets tracker management",
+	}
+
+	cmd.AddCommand(trackerInitCmd())
+	cmd.AddCommand(trackerListCmd())
+	cmd.AddCommand(trackerAddCmd())
+	cmd.AddCommand(trackerSyncTopicsCmd())
+	return cmd
+}
+
+func trackerInitCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "init",
+		Short: "Initialize Google Sheet with headers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			if !cfg.Tracker.Enabled {
+				return fmt.Errorf("tracker is not enabled in config - set tracker.enabled=true and tracker.spreadsheet_id")
+			}
+
+			t, err := tracker.NewSheetsTracker(tracker.Config{
+				Enabled:            cfg.Tracker.Enabled,
+				SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+				SheetName:          cfg.Tracker.SheetName,
+				CredentialsFile:    cfg.Tracker.CredentialsFile,
+				ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+			}, log)
+			if err != nil {
+				return fmt.Errorf("failed to create tracker: %w", err)
+			}
+
+			if err := t.InitializeSheet(ctx); err != nil {
+				return fmt.Errorf("failed to initialize sheet: %w", err)
+			}
+
+			fmt.Println("Google Sheet initialized successfully!")
+			fmt.Printf("Spreadsheet ID: %s\n", cfg.Tracker.SpreadsheetID)
+			fmt.Printf("Sheet Name: %s\n", cfg.Tracker.SheetName)
+			fmt.Println("\nColumns created:")
+			for i, col := range tracker.SheetColumns {
+				fmt.Printf("  %d. %s\n", i+1, col)
+			}
+
+			return nil
+		},
+	}
+}
+
+func trackerListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List all tracked posts from Google Sheet",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			if !cfg.Tracker.Enabled {
+				return fmt.Errorf("tracker is not enabled in config")
+			}
+
+			t, err := tracker.NewSheetsTracker(tracker.Config{
+				Enabled:            cfg.Tracker.Enabled,
+				SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+				SheetName:          cfg.Tracker.SheetName,
+				CredentialsFile:    cfg.Tracker.CredentialsFile,
+				ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+			}, log)
+			if err != nil {
+				return fmt.Errorf("failed to create tracker: %w", err)
+			}
+
+			posts, err := t.GetAllPosts(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get posts: %w", err)
+			}
+
+			fmt.Printf("\n=== Tracked Posts (%d) ===\n\n", len(posts))
+			for _, p := range posts {
+				fmt.Printf("[%d] %s | %s\n", p.TopicID, p.Status, p.TopicTitle)
+				if p.LinkedInURL != "" {
+					fmt.Printf("    URL: %s\n", p.LinkedInURL)
+				}
+				fmt.Println()
+			}
+
+			return nil
+		},
+	}
+}
+
+func trackerAddCmd() *cobra.Command {
+	var postID uint
+
+	cmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add a post to the tracker manually",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			if !cfg.Tracker.Enabled {
+				return fmt.Errorf("tracker is not enabled in config")
+			}
+
+			// Get post from database
+			post, err := repo.GetPostByID(ctx, postID)
+			if err != nil {
+				return fmt.Errorf("post not found: %w", err)
+			}
+
+			// Get topic
+			var topic *models.Topic
+			if post.TopicID != nil {
+				topic, err = repo.GetTopicByID(ctx, *post.TopicID)
+				if err != nil {
+					return fmt.Errorf("topic not found: %w", err)
+				}
+			} else {
+				return fmt.Errorf("post has no associated topic")
+			}
+
+			t, err := tracker.NewSheetsTracker(tracker.Config{
+				Enabled:            cfg.Tracker.Enabled,
+				SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+				SheetName:          cfg.Tracker.SheetName,
+				CredentialsFile:    cfg.Tracker.CredentialsFile,
+				ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+			}, log)
+			if err != nil {
+				return fmt.Errorf("failed to create tracker: %w", err)
+			}
+
+			// Track the post
+			if err := t.TrackNewPost(ctx, topic, post); err != nil {
+				return fmt.Errorf("failed to track post: %w", err)
+			}
+
+			// If published, update status
+			if post.Status == models.PostStatusPublished && post.LinkedInPostURN != "" {
+				if err := t.UpdatePostPublished(ctx, topic.ID, post.LinkedInPostURN); err != nil {
+					return fmt.Errorf("failed to update publish status: %w", err)
+				}
+			}
+
+			fmt.Printf("Post %d added to tracker successfully!\n", postID)
+			fmt.Printf("Topic: %s\n", topic.Title)
+			fmt.Printf("Status: %s\n", post.Status)
+			if post.LinkedInPostURN != "" {
+				fmt.Printf("LinkedIn: https://www.linkedin.com/feed/update/%s\n", post.LinkedInPostURN)
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().UintVar(&postID, "post-id", 0, "Post ID to add to tracker (required)")
+	cmd.MarkFlagRequired("post-id")
+
+	return cmd
+}
+
+func trackerSyncTopicsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "sync-topics",
+		Short: "Sync all discovered topics to Google Sheets",
+		Long: `Syncs all topics from the database to a "Topics" sheet in Google Sheets.
+This allows you to review all discovered topics and mark which ones to use for posts.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			if !cfg.Tracker.Enabled {
+				return fmt.Errorf("tracker is not enabled in config")
+			}
+
+			t, err := tracker.NewSheetsTracker(tracker.Config{
+				Enabled:            cfg.Tracker.Enabled,
+				SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+				SheetName:          cfg.Tracker.SheetName,
+				CredentialsFile:    cfg.Tracker.CredentialsFile,
+				ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+			}, log)
+			if err != nil {
+				return fmt.Errorf("failed to create tracker: %w", err)
+			}
+
+			// Get all topics from database (use high limit to get all)
+			topics, err := repo.ListTopics(ctx, storage.TopicFilter{
+				Limit:     1000,
+				OrderBy:   "discovered_at",
+				OrderDesc: true,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get topics: %w", err)
+			}
+
+			fmt.Printf("Found %d topics in database, syncing to Google Sheets...\n", len(topics))
+
+			// Sync topics to sheet
+			added, updated, err := t.SyncTopics(ctx, topics)
+			if err != nil {
+				return fmt.Errorf("failed to sync topics: %w", err)
+			}
+
+			fmt.Printf("\nSync complete!\n")
+			fmt.Printf("  Added: %d new topics\n", added)
+			fmt.Printf("  Updated: %d existing topics\n", updated)
+			fmt.Printf("\nView at: https://docs.google.com/spreadsheets/d/%s\n", cfg.Tracker.SpreadsheetID)
+
+			return nil
+		},
+	}
 }

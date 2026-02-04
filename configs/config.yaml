@@ -27,31 +27,53 @@ sources:
     enabled: true
     api_key: ""           # Or set LINKEDIN_SOURCES_NEWSAPI_API_KEY
     categories:
-      - business
       - technology
     language: "en"
-    fetch_interval: "2h"
+    fetch_interval: "1h"
 
   rss:
     enabled: true
     feeds:
-      - name: "Harvard Business Review"
-        url: "https://hbr.org/feed"
-      - name: "Forbes Leadership"
-        url: "https://www.forbes.com/leadership/feed/"
-      - name: "Inc.com"
-        url: "https://www.inc.com/rss"
-      - name: "Entrepreneur"
-        url: "https://www.entrepreneur.com/feed"
+      # Major Tech News
+      - name: "TechCrunch"
+        url: "https://techcrunch.com/feed/"
+      - name: "The Verge"
+        url: "https://www.theverge.com/rss/index.xml"
+      - name: "Ars Technica"
+        url: "https://feeds.arstechnica.com/arstechnica/index"
+      - name: "Wired"
+        url: "https://www.wired.com/feed/rss"
+      - name: "ZDNet"
+        url: "https://www.zdnet.com/news/rss.xml"
+
+      # Developer & Engineering
+      - name: "Hacker News"
+        url: "https://hnrss.org/frontpage"
+      - name: "Dev.to"
+        url: "https://dev.to/feed"
+      - name: "InfoQ"
+        url: "https://feed.infoq.com/"
+
+      # AI & Cloud
+      - name: "VentureBeat AI"
+        url: "https://venturebeat.com/category/ai/feed/"
+      - name: "The New Stack"
+        url: "https://thenewstack.io/feed/"
+
+      # Security
+      - name: "Krebs on Security"
+        url: "https://krebsonsecurity.com/feed/"
+      - name: "Bleeping Computer"
+        url: "https://www.bleepingcomputer.com/feed/"
     fetch_interval: "30m"
 
   twitter:
     enabled: false
     bearer_token: ""      # Or set LINKEDIN_SOURCES_TWITTER_BEARER_TOKEN
     search_queries:
-      - "#leadership"
-      - "#businessgrowth"
-      - "#entrepreneurship"
+      - "#tech"
+      - "#AI"
+      - "#cybersecurity"
     fetch_interval: "1h"
 
   reddit:
@@ -59,24 +81,25 @@ sources:
     client_id: ""
     client_secret: ""
     subreddits:
-      - "entrepreneur"
-      - "leadership"
-      - "startups"
-      - "smallbusiness"
+      - "technology"
+      - "programming"
+      - "artificial"
+      - "netsec"
+      - "devops"
     fetch_interval: "1h"
 
   custom:
     enabled: true
     keywords:
-      - "leadership trends"
-      - "management best practices"
-      - "career development"
-      - "productivity hacks"
-      - "business growth strategies"
+      - "AI breakthroughs"
+      - "cloud computing trends"
+      - "cybersecurity threats"
+      - "software development"
+      - "tech industry news"
 
 scheduler:
-  discovery_cron: "0 */2 * * *"    # Every 2 hours
-  publish_cron: "0 9,14 * * 1-5"   # 9am and 2pm, Mon-Fri
+  discovery_cron: "0 */1 * * *"    # Every hour (more frequent for news)
+  publish_cron: "0 9 * * *"        # 9am daily (top 3 news digest)
   cleanup_cron: "0 0 * * 0"        # Weekly cleanup on Sunday
 
 rate_limit:
@@ -91,11 +114,13 @@ logging:
 
 publishing:
   auto_approve: false      # Set to true for fully autonomous mode
-  max_posts_per_day: 3
-  min_score_threshold: 70  # Minimum AI score to consider
+  max_posts_per_day: 1     # One daily digest with top 3 news
+  min_score_threshold: 75  # Higher threshold for quality news
   default_post_type: "text"
   brand_voice: |
-    Professional, insightful, and engaging.
-    Focus on actionable insights for business leaders.
-    Use clear language, avoid jargon.
-    Include a thought-provoking question or call-to-action.
+    Tech-savvy, informative, and concise.
+    Focus on the most impactful IT and technology news of the day.
+    Present top 3 news stories in a digestible format.
+    Add brief analysis on why each story matters.
+    Use clear technical language accessible to IT professionals.
+    End with a question to spark discussion.

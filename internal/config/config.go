@@ -18,6 +18,7 @@ type Config struct {
 	RateLimit  RateLimitConfig  `mapstructure:"rate_limit"`
 	Logging    LoggingConfig    `mapstructure:"logging"`
 	Publishing PublishingConfig `mapstructure:"publishing"`
+	Tracker    TrackerConfig    `mapstructure:"tracker"`
 }
 
 // DatabaseConfig holds database connection settings
@@ -32,6 +33,10 @@ type LinkedInConfig struct {
 	ClientSecret string   `mapstructure:"client_secret"`
 	RedirectURI  string   `mapstructure:"redirect_uri"`
 	Scopes       []string `mapstructure:"scopes"`
+	// Token injection from environment (for headless deployment)
+	AccessToken    string `mapstructure:"access_token"`
+	RefreshToken   string `mapstructure:"refresh_token"`
+	TokenExpiresAt string `mapstructure:"token_expires_at"`
 }
 
 // AnthropicConfig holds Claude API settings
@@ -124,6 +129,15 @@ type PublishingConfig struct {
 	MinScoreThreshold float64 `mapstructure:"min_score_threshold"`
 	DefaultPostType   string  `mapstructure:"default_post_type"`
 	BrandVoice        string  `mapstructure:"brand_voice"`
+}
+
+// TrackerConfig holds Google Sheets tracker settings
+type TrackerConfig struct {
+	Enabled            bool   `mapstructure:"enabled"`
+	SpreadsheetID      string `mapstructure:"spreadsheet_id"`
+	SheetName          string `mapstructure:"sheet_name"`
+	CredentialsFile    string `mapstructure:"credentials_file"`
+	ServiceAccountJSON string `mapstructure:"service_account_json"`
 }
 
 // Load loads configuration from file and environment variables
@@ -222,6 +236,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("publishing.min_score_threshold", 70.0)
 	v.SetDefault("publishing.default_post_type", "text")
 	v.SetDefault("publishing.brand_voice", "Professional, insightful, and engaging. Focus on actionable insights for business leaders.")
+
+	// Tracker defaults
+	v.SetDefault("tracker.enabled", false)
+	v.SetDefault("tracker.sheet_name", "Posts")
 }
 
 // Validate validates the configuration

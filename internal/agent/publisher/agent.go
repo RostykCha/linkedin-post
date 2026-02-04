@@ -10,6 +10,7 @@ import (
 	"github.com/linkedin-agent/internal/linkedin"
 	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/internal/storage"
+	"github.com/linkedin-agent/internal/tracker"
 	"github.com/linkedin-agent/pkg/logger"
 )
 
@@ -20,6 +21,7 @@ type Agent struct {
 	repository     storage.Repository
 	config         config.PublishingConfig
 	log            *logger.Logger
+	tracker        *tracker.SheetsTracker
 }
 
 // NewAgent creates a new publisher agent
@@ -37,6 +39,11 @@ func NewAgent(
 		config:         publishConfig,
 		log:            log.WithComponent("publisher"),
 	}
+}
+
+// SetTracker sets the Google Sheets tracker for the agent
+func (a *Agent) SetTracker(t *tracker.SheetsTracker) {
+	a.tracker = t
 }
 
 // GenerateResult contains the result of content generation
@@ -120,6 +127,13 @@ func (a *Agent) GenerateContent(ctx context.Context, topicID uint, postType mode
 		return nil, fmt.Errorf("failed to save post: %w", err)
 	}
 
+	// Track in Google Sheets
+	if a.tracker != nil {
+		if err := a.tracker.TrackNewPost(ctx, topic, post); err != nil {
+			a.log.Warn().Err(err).Msg("Failed to track post in Google Sheets")
+		}
+	}
+
 	// Determine if should auto-publish based on hybrid approval mode
 	if topic.IsHighScore() && a.config.AutoApprove {
 		post.Status = models.PostStatusScheduled
@@ -127,6 +141,10 @@ func (a *Agent) GenerateContent(ctx context.Context, topicID uint, postType mode
 		post.ScheduledFor = &now
 		if err := a.repository.UpdatePost(ctx, post); err != nil {
 			a.log.Warn().Err(err).Msg("Failed to schedule high-score post")
+		}
+		// Update tracker with scheduled status
+		if a.tracker != nil {
+			a.tracker.UpdatePostScheduled(ctx, topic.ID, now)
 		}
 	}
 
@@ -199,6 +217,11 @@ func (a *Agent) Publish(ctx context.Context, postID uint) (*PublishResult, error
 		post.RetryCount++
 		a.repository.UpdatePost(ctx, post)
 
+		// Track failure in Google Sheets
+		if a.tracker != nil && post.TopicID != nil {
+			a.tracker.UpdatePostFailed(ctx, *post.TopicID, err.Error())
+		}
+
 		result.Error = err
 		a.log.Error().
 			Err(err).
@@ -219,6 +242,10 @@ func (a *Agent) Publish(ctx context.Context, postID uint) (*PublishResult, error
 		if topic, err := a.repository.GetTopicByID(ctx, *post.TopicID); err == nil {
 			topic.Status = models.TopicStatusUsed
 			a.repository.UpdateTopic(ctx, topic)
+		}
+		// Track success in Google Sheets
+		if a.tracker != nil {
+			a.tracker.UpdatePostPublished(ctx, *post.TopicID, urn)
 		}
 	}
 
@@ -289,4 +316,98 @@ func (a *Agent) ApprovePost(ctx context.Context, postID uint) error {
 	post.ScheduledFor = &now
 
 	return a.repository.UpdatePost(ctx, post)
+}
+
+// DigestResult contains the result of digest generation
+type DigestResult struct {
+	Post      *models.Post
+	Preview   string
+	TopicIDs  []uint
+}
+
+// GenerateDigest creates a daily digest post from the top 3 trending topics
+func (a *Agent) GenerateDigest(ctx context.Context) (*DigestResult, error) {
+	a.log.Info().Msg("Generating daily tech news digest")
+
+	// Get top 3 approved topics by score
+	topics, err := a.repository.GetTopTopics(ctx, 3, a.config.MinScoreThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get top topics: %w", err)
+	}
+
+	if len(topics) < 3 {
+		return nil, fmt.Errorf("not enough topics for digest (need 3, got %d)", len(topics))
+	}
+
+	// Convert to digest topics
+	digestTopics := make([]ai.DigestTopic, 3)
+	topicIDs := make([]uint, 3)
+	for i, topic := range topics[:3] {
+		digestTopics[i] = ai.DigestTopic{
+			Title:       topic.Title,
+			Description: topic.Description,
+			Source:      topic.SourceName,
+		}
+		topicIDs[i] = topic.ID
+	}
+
+	// Generate digest content
+	digest, err := a.aiClient.GenerateDigest(ctx, digestTopics, a.config.BrandVoice)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate digest: %w", err)
+	}
+
+	// Append hashtags to content
+	fullContent := digest.Content
+	if len(digest.Hashtags) > 0 {
+		fullContent += "\n\n"
+		for _, tag := range digest.Hashtags {
+			if tag[0] != '#' {
+				fullContent += "#"
+			}
+			fullContent += tag + " "
+		}
+	}
+
+	// Create post (link to first topic for tracking)
+	post := &models.Post{
+		TopicID:          &topicIDs[0],
+		Content:          fullContent,
+		PostType:         models.PostTypeText,
+		GenerationPrompt: "Daily tech news digest - top 3 stories",
+		AIMetadata: models.JSON{
+			"hook":      digest.Hook,
+			"cta":       digest.CTA,
+			"hashtags":  digest.Hashtags,
+			"topic_ids": topicIDs,
+			"is_digest": true,
+		},
+		Status: models.PostStatusDraft,
+	}
+
+	// Save draft
+	if err := a.repository.CreatePost(ctx, post); err != nil {
+		return nil, fmt.Errorf("failed to save digest post: %w", err)
+	}
+
+	// Auto-schedule if enabled
+	if a.config.AutoApprove {
+		post.Status = models.PostStatusScheduled
+		now := time.Now()
+		post.ScheduledFor = &now
+		if err := a.repository.UpdatePost(ctx, post); err != nil {
+			a.log.Warn().Err(err).Msg("Failed to auto-schedule digest")
+		}
+	}
+
+	a.log.Info().
+		Uint("post_id", post.ID).
+		Uints("topic_ids", topicIDs).
+		Msg("Daily digest generated")
+
+	return &DigestResult{
+		Post:     post,
+		Preview:  post.Content,
+		TopicIDs: topicIDs,
+	}, nil
 }

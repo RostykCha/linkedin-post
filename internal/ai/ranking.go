@@ -222,3 +222,49 @@ func (c *Client) ExpandKeyword(ctx context.Context, keyword string) ([]*Expanded
 
 	return result.Topics, nil
 }
+
+// DigestTopic represents a topic for the daily digest
+type DigestTopic struct {
+	Title       string
+	Description string
+	Source      string
+}
+
+// GeneratedDigest represents an AI-generated daily news digest
+type GeneratedDigest struct {
+	Content  string   `json:"content"`
+	Hashtags []string `json:"hashtags"`
+	Hook     string   `json:"hook"`
+	CTA      string   `json:"cta"`
+}
+
+// GenerateDigest creates a daily news digest post from top 3 topics
+func (c *Client) GenerateDigest(ctx context.Context, topics []DigestTopic, brandVoice string) (*GeneratedDigest, error) {
+	if len(topics) < 3 {
+		return nil, fmt.Errorf("digest requires at least 3 topics, got %d", len(topics))
+	}
+
+	systemPrompt := fmt.Sprintf(DigestGenerationSystemPrompt, brandVoice)
+
+	userPrompt := fmt.Sprintf(DigestGenerationUserPrompt,
+		topics[0].Title, topics[0].Description, topics[0].Source,
+		topics[1].Title, topics[1].Description, topics[1].Source,
+		topics[2].Title, topics[2].Description, topics[2].Source,
+	)
+
+	response, err := c.CompleteWithJSON(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	var digest GeneratedDigest
+	if err := json.Unmarshal([]byte(response), &digest); err != nil {
+		c.log.Error().
+			Err(err).
+			Str("response", response).
+			Msg("Failed to parse digest response")
+		return nil, fmt.Errorf("failed to parse digest response: %w", err)
+	}
+
+	return &digest, nil
+}
