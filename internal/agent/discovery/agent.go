@@ -12,7 +12,7 @@ import (
 	"github.com/linkedin-agent/pkg/logger"
 )
 
-// Agent handles topic discovery from multiple sources
+// Agent handles daily IT/tech news discovery from multiple sources
 type Agent struct {
 	sourceManager *source.Manager
 	aiClient      *ai.Client
@@ -50,7 +50,7 @@ func (a *Agent) Run(ctx context.Context) (*DiscoveryResult, error) {
 	startTime := time.Now()
 	result := &DiscoveryResult{}
 
-	a.log.Info().Msg("Starting topic discovery")
+	a.log.Info().Msg("Starting daily tech news discovery")
 
 	// Step 1: Fetch topics from all sources
 	rawTopics, fetchErrors := a.sourceManager.FetchAll(ctx)

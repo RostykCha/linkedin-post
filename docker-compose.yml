@@ -1,0 +1,42 @@
+services:
+  scheduler:
+    build: .
+    container_name: linkedin-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./configs/config.local.yaml:/app/configs/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "linkedin-scheduler"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  cli:
+    build: .
+    container_name: linkedin-cli
+    profiles: ["cli"]
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./configs/config.local.yaml:/app/configs/config.yaml:ro
+    entrypoint: ["./linkedin-agent"]
+    command: ["--help"]
+
+  # OAuth login helper - exposes port for LinkedIn callback
+  oauth:
+    build: .
+    container_name: linkedin-oauth
+    profiles: ["oauth"]
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./configs/config.local.yaml:/app/configs/config.yaml:ro
+    entrypoint: ["./linkedin-agent"]
+    command: ["oauth", "login", "--port=8080"]

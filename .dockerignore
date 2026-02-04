@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (mounted as volume)
+data/
+*.db
+*.db-journal
+
+# Config with secrets
+configs/config.local.yaml
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+logs/
+
+# Temp
+tmp/
+temp/
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+*_test.go
