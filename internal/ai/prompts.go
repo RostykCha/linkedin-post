@@ -58,6 +58,24 @@ const (
 Your writing style:
 %s
 
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║ ⚠️  CRITICAL REQUIREMENTS - VIOLATION WILL CAUSE REJECTION ⚠️                   ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║ 1. FIRST LINE MUST BE: "Tech Insights from Ros | [Today's Date]"              ║
+║    Example: "Tech Insights from Ros | Feb 4, 2026"                            ║
+║                                                                               ║
+║ 2. LAST LINES MUST BE THE FOOTER (after hashtags):                            ║
+║    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                                ║
+║    LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/           ║
+║    Instagram: https://www.instagram.com/rostislav_cha                         ║
+║                                                                               ║
+║ 3. NEVER FABRICATE PERSONAL EXPERIENCE:                                       ║
+║    ❌ WRONG: "I tested this", "I watched", "Our team found"                   ║
+║    ✅ RIGHT: "Developers report", "Teams are finding", "Early adopters say"   ║
+║                                                                               ║
+║ 4. NO EMOJIS ANYWHERE IN THE POST                                             ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
 ═══════════════════════════════════════════════════════════════════════════════
 RESEARCH-BACKED RULES FOR VIRAL LINKEDIN POSTS
 (Based on analysis of 34,000+ viral posts and top tech creators)
@@ -112,22 +130,37 @@ Example:
 
 This creates TENSION → HOPE → CURIOSITY in 3 lines.
 
-=== RULE 3: THE HUMAN ELEMENT ===
+=== RULE 3: THE HUMAN ELEMENT (WITHOUT FABRICATION) ===
 
-DATA: 9 out of 10 viral posts contain personal pronouns (I, me, my, you).
+CRITICAL: Do NOT fabricate personal experiences. Avoid lying.
 
-MUST DO:
-• Use "I" and "you" - makes it personal and direct
-• Include people and feelings: "I was terrified when our database crashed..."
-• Name characters: you, your mentor, your team, a junior developer
-• Show vulnerability: "We spent 3 months refactoring – here's what went wrong"
+NEVER write fake first-person claims like:
+• "I've been testing it for the past week..." (you haven't)
+• "I watched a junior developer on my team..." (you didn't)
+• "We implemented this at my company..." (you didn't)
 
-FRAME YOUR STORY AS THE READER'S JOURNEY:
-• If sharing success → note how others can achieve it
-• If sharing failure → acknowledge how common it is + what anyone can learn
+INSTEAD, use third-person perspective or general observations:
+• "Developers are reporting that..."
+• "Teams using this have found..."
+• "Early adopters are seeing..."
+• "The community response shows..."
+• "Engineers who've tested this say..."
+
+ACCEPTABLE PERSONAL ELEMENTS:
+• Use "you" to address the reader: "Here's what this means for you..."
+• Share opinions/analysis: "This could change how we think about..."
+• Ask questions: "What's your experience with...?"
+• Express genuine reactions: "This is exciting because..."
+
+FRAME AS INDUSTRY OBSERVER, NOT FABRICATED PARTICIPANT:
+• Report on what's happening in the industry
+• Analyze implications for tech professionals
+• Share insights without claiming fake personal experience
 
 NEVER:
-• Write in third person or passive voice
+• Fabricate personal experiences or stories
+• Claim to have tested/used something you haven't
+• Invent team members or scenarios
 • Sound like a corporate press release
 • Preach or condescend
 
@@ -207,16 +240,17 @@ END WITH IMPACT:
    DATA: Posts with explicit questions get 20-40%% more comments
 
 PROVEN CTAs:
-• "Does this resonate with your experience?"
 • "What's your take on this?"
-• "What's been your experience recently?"
-• "Have you faced something similar?"
-• "I'd love to hear your thoughts"
+• "What's been your experience with this?"
+• "How do you see this impacting our industry?"
+• "What are your thoughts?"
 
 RULE: Ask ONE clear question, not multiple. Make it easy to answer.
 
-3. FOOTER WITH AUTHOR LINKS:
-   After hashtags, add a separator line and author profile links:
+3. FOOTER WITH AUTHOR LINKS (MANDATORY - NEVER SKIP):
+   ⚠️ ALWAYS include this footer AFTER hashtags. This is NOT optional.
+
+   Format:
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
    Instagram: https://www.instagram.com/rostislav_cha
@@ -247,32 +281,42 @@ DATA: Positive/celebratory posts get ~60%% more shares than average.
 
 === FINAL CHECKLIST (MUST PASS ALL) ===
 
-□ Hook grabs attention in first 210 characters
+□ HEADER: Starts with "Tech Insights from Ros | [Month Day, Year]"
+□ Hook grabs attention in first 210 characters (after header)
 □ Triggers at least one strong emotion (inspiration/curiosity/fear/validation)
-□ Contains personal pronouns (I, me, my, you)
+□ NO FABRICATED EXPERIENCES - use third-person for things you didn't personally do
 □ Uses short paragraphs with white space between each
-□ Tells a story or shares genuine experience (not generic advice)
+□ Analyzes news/trends from industry observer perspective (not fake participant)
 □ Provides actionable value or quotable insight
 □ Ends with memorable takeaway + ONE engagement question
 □ Under 3000 characters total (LinkedIn limit)
 □ NO EMOJIS - use unicode separators or plain text formatting only
 □ 3-5 relevant hashtags at the end
-□ Footer with LinkedIn and Instagram links after hashtags
+□ FOOTER (MANDATORY): Separator line + LinkedIn and Instagram links after hashtags
 □ No jargon walls - accessible to broad professional audience
 □ Has "social currency" - readers would look smart sharing it`
 
-	ContentGenerationUserPrompt = `Create a LinkedIn post about the following topic.
+	ContentGenerationUserPrompt = `Topic: %s
+Angle: %s
+Details: %s
 
-Topic: %s
-Suggested Angle: %s
-Key Points to Cover: %s
+Write a LinkedIn post. The content field in your JSON response must start with this exact line:
+Tech Insights from Ros | Feb 4, 2026
 
-Respond in JSON format:
+And must end with these exact lines after the hashtags:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
+Instagram: https://www.instagram.com/rostislav_cha
+
+Write from a third-person industry observer perspective. Use phrases like "Developers report that..." or "Teams are finding..." instead of "I tested" or "I found".
+
+Do not use any emojis.
+
 {
-  "content": "<the full LinkedIn post>",
-  "hashtags": ["<hashtag1>", "<hashtag2>"],
-  "hook": "<the opening line>",
-  "cta": "<the call-to-action>"
+  "content": "Tech Insights from Ros | Feb 4, 2026\n\n[hook]\n\n[body using third-person perspective]\n\n[insights]\n\n[question for engagement]\n\n#tag1 #tag2 #tag3\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha",
+  "hashtags": ["tag1", "tag2"],
+  "hook": "the hook line",
+  "cta": "the question"
 }`
 
 	// Poll generation

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/linkedin-agent/internal/models"
 )
@@ -12,17 +13,21 @@ import (
 // stripMarkdownCodeBlock removes markdown code block delimiters from AI responses
 func stripMarkdownCodeBlock(response string) string {
 	response = strings.TrimSpace(response)
-	// Check for ```json or ``` at the start
-	if strings.HasPrefix(response, "```json") {
-		response = strings.TrimPrefix(response, "```json")
-	} else if strings.HasPrefix(response, "```") {
-		response = strings.TrimPrefix(response, "```")
+
+	// Find the first { which starts valid JSON
+	startIdx := strings.Index(response, "{")
+	if startIdx == -1 {
+		return response
 	}
-	// Check for ``` at the end
-	if strings.HasSuffix(response, "```") {
-		response = strings.TrimSuffix(response, "```")
+
+	// Find the last } which ends valid JSON
+	endIdx := strings.LastIndex(response, "}")
+	if endIdx == -1 || endIdx < startIdx {
+		return response
 	}
-	return strings.TrimSpace(response)
+
+	// Extract just the JSON object
+	return response[startIdx : endIdx+1]
 }
 
 // TopicRanking represents the AI's analysis of a topic
@@ -140,6 +145,27 @@ type GeneratedContent struct {
 	CTA      string   `json:"cta"`
 }
 
+// postProcessContent ensures header and footer are present in the content
+func postProcessContent(content string) string {
+	// Generate header with today's date
+	today := time.Now().Format("Jan 2, 2006")
+	header := "Tech Insights from Ros | " + today
+	footer := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
+
+	// Check if header is present
+	if !strings.HasPrefix(content, "Tech Insights from Ros") {
+		content = header + "\n\n" + content
+	}
+
+	// Check if footer is present
+	if !strings.Contains(content, "linkedin.com/in/qa-lead-rostyslav-chabria") {
+		// Add footer after content
+		content = strings.TrimSpace(content) + "\n\n" + footer
+	}
+
+	return content
+}
+
 // GenerateContent creates LinkedIn post content for a topic
 func (c *Client) GenerateContent(ctx context.Context, topic *models.Topic, brandVoice string) (*GeneratedContent, error) {
 	systemPrompt := fmt.Sprintf(ContentGenerationSystemPrompt, brandVoice)
@@ -172,7 +198,22 @@ func (c *Client) GenerateContent(ctx context.Context, topic *models.Topic, brand
 		return nil, fmt.Errorf("failed to parse content response: %w", err)
 	}
 
+	// Post-process to ensure header and footer are present
+	content.Content = postProcessContent(content.Content)
+	c.log.Info().
+		Str("content_start", content.Content[:min(60, len(content.Content))]).
+		Bool("has_header", strings.HasPrefix(content.Content, "Tech Insights")).
+		Bool("has_footer", strings.Contains(content.Content, "linkedin.com/in/qa-lead")).
+		Msg("Post-processed content")
+
 	return &content, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // GeneratedPoll represents an AI-generated LinkedIn poll

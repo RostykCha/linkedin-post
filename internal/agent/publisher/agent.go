@@ -96,17 +96,8 @@ func (a *Agent) GenerateContent(ctx context.Context, topicID uint, postType mode
 			return nil, fmt.Errorf("failed to generate content: %w", err)
 		}
 
-		// Append hashtags to content
+		// Use AI-generated content directly (post-processing adds header/footer in ai/ranking.go)
 		fullContent := content.Content
-		if len(content.Hashtags) > 0 {
-			fullContent += "\n\n"
-			for _, tag := range content.Hashtags {
-				if tag[0] != '#' {
-					fullContent += "#"
-				}
-				fullContent += tag + " "
-			}
-		}
 
 		post = &models.Post{
 			TopicID:          &topic.ID,
