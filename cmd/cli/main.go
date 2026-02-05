@@ -9,11 +9,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/linkedin-agent/internal/agent/commenter"
 	"github.com/linkedin-agent/internal/agent/discovery"
 	"github.com/linkedin-agent/internal/agent/publisher"
 	"github.com/linkedin-agent/internal/ai"
 	"github.com/linkedin-agent/internal/config"
 	"github.com/linkedin-agent/internal/linkedin"
+	"github.com/linkedin-agent/internal/media/unsplash"
 	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/internal/source"
 	"github.com/linkedin-agent/internal/source/custom"
@@ -52,6 +54,7 @@ engaging content to LinkedIn using Claude AI.`,
 	rootCmd.AddCommand(topicsCmd())
 	rootCmd.AddCommand(postsCmd())
 	rootCmd.AddCommand(trackerCmd())
+	rootCmd.AddCommand(commentsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -219,6 +222,13 @@ func publishGenerateCmd() *cobra.Command {
 
 			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
 
+			// Configure media support if enabled
+			if cfg.Media.Enabled && cfg.Media.UnsplashAPIKey != "" {
+				unsplashClient := unsplash.NewClient(cfg.Media.UnsplashAPIKey, log)
+				agent.SetMediaConfig(cfg.Media, unsplashClient)
+				log.Info().Msg("Media support enabled with Unsplash")
+			}
+
 			// Set up tracker if enabled
 			if cfg.Tracker.Enabled {
 				t, err := tracker.NewSheetsTracker(tracker.Config{
@@ -284,6 +294,13 @@ func publishDigestCmd() *cobra.Command {
 			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
 			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
 
+			// Configure media support if enabled
+			if cfg.Media.Enabled && cfg.Media.UnsplashAPIKey != "" {
+				unsplashClient := unsplash.NewClient(cfg.Media.UnsplashAPIKey, log)
+				agent.SetMediaConfig(cfg.Media, unsplashClient)
+				log.Info().Msg("Media support enabled with Unsplash")
+			}
+
 			// Get top 3 topics to show what will be used
 			topics, err := repo.GetTopTopics(ctx, 3, minScore)
 			if err != nil {
@@ -336,6 +353,13 @@ func publishNowCmd() *cobra.Command {
 			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
 
 			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
+
+			// Configure media support if enabled
+			if cfg.Media.Enabled && cfg.Media.UnsplashAPIKey != "" {
+				unsplashClient := unsplash.NewClient(cfg.Media.UnsplashAPIKey, log)
+				agent.SetMediaConfig(cfg.Media, unsplashClient)
+				log.Info().Msg("Media support enabled with Unsplash")
+			}
 
 			// Set up tracker if enabled
 			if cfg.Tracker.Enabled {
@@ -922,4 +946,212 @@ This allows you to review all discovered topics and mark which ones to use for p
 			return nil
 		},
 	}
+}
+
+// ============ COMMENTS COMMANDS ============
+
+func commentsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "comments",
+		Short: "Comment automation commands",
+	}
+
+	cmd.AddCommand(commentsListCmd())
+	cmd.AddCommand(commentsRunCmd())
+	cmd.AddCommand(commentsDiscoverCmd())
+	return cmd
+}
+
+func commentsListCmd() *cobra.Command {
+	var status string
+	var limit int
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List comments",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			filter := storage.DefaultCommentFilter()
+			filter.Limit = limit
+
+			if status != "" {
+				s := models.CommentStatus(status)
+				filter.Status = &s
+			}
+
+			comments, err := repo.ListComments(ctx, filter)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("\n=== Comments (%d) ===\n\n", len(comments))
+			for _, c := range comments {
+				fmt.Printf("[%d] %s | Style: %s\n", c.ID, c.Status, c.CommentStyle)
+				fmt.Printf("    Target: %s\n", c.TargetPostTitle)
+				if c.TargetAuthorName != "" {
+					fmt.Printf("    Author: %s\n", c.TargetAuthorName)
+				}
+				fmt.Printf("    Comment: %s\n", truncateStr(c.Content, 100))
+				if c.PostedAt != nil {
+					fmt.Printf("    Posted: %s\n", c.PostedAt.Format(time.RFC1123))
+				}
+				if c.PostEngagement > 0 {
+					fmt.Printf("    Post Engagement: %d\n", c.PostEngagement)
+				}
+				if c.ErrorMessage != "" {
+					fmt.Printf("    Error: %s\n", c.ErrorMessage)
+				}
+				fmt.Println()
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status (pending, posted, failed, skipped)")
+	cmd.Flags().IntVar(&limit, "limit", 20, "Maximum comments to show")
+
+	return cmd
+}
+
+func commentsRunCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run the comment automation (posts one comment if conditions are met)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			limiter := ratelimit.NewDefaultLimiter()
+			aiClient := ai.NewClient(cfg.Anthropic, limiter, log)
+			oauthManager := linkedin.NewOAuthManager(cfg.LinkedIn, repo, log)
+			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
+
+			agent := commenter.NewAgent(aiClient, linkedinClient, repo, cfg.Commenter, log)
+
+			result, err := agent.Run(ctx)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("\n=== Comment Run Results ===\n")
+			fmt.Printf("Posts Discovered:   %d\n", result.PostsDiscovered)
+			fmt.Printf("Comments Generated: %d\n", result.CommentsGenerated)
+			fmt.Printf("Comments Posted:    %d\n", result.CommentsPosted)
+			fmt.Printf("Comments Skipped:   %d\n", result.CommentsSkipped)
+			fmt.Printf("Duration:           %s\n", result.Duration)
+
+			if len(result.Errors) > 0 {
+				fmt.Printf("\nErrors:\n")
+				for _, e := range result.Errors {
+					fmt.Printf("  - %s\n", e)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func commentsDiscoverCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "discover",
+		Short: "Discover posts that could be commented on (dry run)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			if len(cfg.Commenter.TargetInfluencers) == 0 {
+				fmt.Println("No target influencers configured.")
+				fmt.Println("Add LinkedIn profile URNs to commenter.target_influencers in your config.")
+				return nil
+			}
+
+			limiter := ratelimit.NewDefaultLimiter()
+			oauthManager := linkedin.NewOAuthManager(cfg.LinkedIn, repo, log)
+			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
+
+			fmt.Printf("Discovering posts from %d influencer(s)...\n\n", len(cfg.Commenter.TargetInfluencers))
+
+			var allPosts []*linkedin.LinkedInPost
+
+			for _, influencerURN := range cfg.Commenter.TargetInfluencers {
+				posts, err := linkedinClient.GetPostsByAuthor(ctx, influencerURN, 5)
+				if err != nil {
+					fmt.Printf("  [ERROR] %s: %v\n", influencerURN, err)
+					continue
+				}
+
+				for _, post := range posts {
+					engagement := post.LikeCount + post.CommentCount
+
+					// Apply filters
+					if engagement < cfg.Commenter.MinPostEngagement {
+						continue
+					}
+					if cfg.Commenter.MaxPostEngagement > 0 && engagement > cfg.Commenter.MaxPostEngagement {
+						continue
+					}
+
+					allPosts = append(allPosts, post)
+				}
+			}
+
+			if len(allPosts) == 0 {
+				fmt.Println("No eligible posts found matching your criteria.")
+				return nil
+			}
+
+			fmt.Printf("=== Eligible Posts (%d) ===\n\n", len(allPosts))
+			for i, post := range allPosts {
+				engagement := post.LikeCount + post.CommentCount
+				publishedAt := time.Unix(post.PublishedAt/1000, 0)
+				age := time.Since(publishedAt)
+
+				// Calculate engagement velocity
+				hoursOld := age.Hours()
+				if hoursOld < 0.5 {
+					hoursOld = 0.5
+				}
+				velocity := float64(post.LikeCount+post.CommentCount*2) / hoursOld
+
+				fmt.Printf("[%d] URN: %s\n", i+1, post.URN)
+				fmt.Printf("    Engagement: %d (Likes: %d, Comments: %d)\n", engagement, post.LikeCount, post.CommentCount)
+				fmt.Printf("    Velocity: %.1f engagements/hour\n", velocity)
+				fmt.Printf("    Age: %s\n", formatDuration(age))
+				fmt.Printf("    Content: %s\n", truncateStr(post.Commentary, 150))
+
+				// Check if already commented
+				existing, _ := repo.GetCommentByTargetURN(ctx, post.URN)
+				if existing != nil {
+					fmt.Printf("    [Already commented]\n")
+				}
+				fmt.Println()
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// Helper function to truncate strings
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// Helper function to format duration nicely
+func formatDuration(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%.1f hours", d.Hours())
+	}
+	return fmt.Sprintf("%.1f days", d.Hours()/24)
 }

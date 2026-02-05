@@ -61,8 +61,8 @@ Your writing style:
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║ ⚠️  CRITICAL REQUIREMENTS - VIOLATION WILL CAUSE REJECTION ⚠️                   ║
 ╠═══════════════════════════════════════════════════════════════════════════════╣
-║ 1. FIRST LINE MUST BE: "Tech Insights from Ros | [Today's Date]"              ║
-║    Example: "Tech Insights from Ros | Feb 4, 2026"                            ║
+║ 1. FIRST LINE MUST BE: "Tech Insights from Ros - [Today's Date]"              ║
+║    Example: "Tech Insights from Ros - Feb 4, 2026"                            ║
 ║                                                                               ║
 ║ 2. LAST LINES MUST BE THE FOOTER (after hashtags):                            ║
 ║    ---                                                                        ║
@@ -281,7 +281,7 @@ DATA: Positive/celebratory posts get ~60%% more shares than average.
 
 === FINAL CHECKLIST (MUST PASS ALL) ===
 
-□ HEADER: Starts with "Tech Insights from Ros | [Month Day, Year]"
+□ HEADER: Starts with "Tech Insights from Ros - [Month Day, Year]"
 □ Hook grabs attention in first 210 characters (after header)
 □ Triggers at least one strong emotion (inspiration/curiosity/fear/validation)
 □ NO FABRICATED EXPERIENCES - use third-person for things you didn't personally do
@@ -301,7 +301,7 @@ Angle: %s
 Details: %s
 
 Write a LinkedIn post. The content field in your JSON response must start with this exact line:
-Tech Insights from Ros | Feb 4, 2026
+Tech Insights from Ros - Feb 4, 2026
 
 And must end with these exact lines after the hashtags:
 ---
@@ -313,7 +313,7 @@ Write from a third-person industry observer perspective. Use phrases like "Devel
 Do not use any emojis.
 
 {
-  "content": "Tech Insights from Ros | Feb 4, 2026\n\n[hook]\n\n[body using third-person perspective]\n\n[insights]\n\n[question for engagement]\n\n#tag1 #tag2 #tag3\n\n---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha",
+  "content": "Tech Insights from Ros - Feb 4, 2026\n\n[hook]\n\n[body using third-person perspective]\n\n[insights]\n\n[question for engagement]\n\n#tag1 #tag2 #tag3\n\n---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha",
   "hashtags": ["tag1", "tag2"],
   "hook": "the hook line",
   "cta": "the question"
@@ -342,7 +342,7 @@ Your writing style:
 %s
 
 ═══════════════════════════════════════════════════════════════════════════════
-DAILY TECH DIGEST - VIRAL POST RULES
+TECH DIGEST - VIRAL POST RULES (Morning & Nightly Updates)
 ═══════════════════════════════════════════════════════════════════════════════
 
 === THE HOOK (First 210 Characters) - CRITICAL ===
@@ -368,7 +368,9 @@ DIGEST HOOK FORMULAS:
 
 === DIGEST STRUCTURE ===
 
-1. HEADER - "Daily Updates from Ros | [Month Day, Year]" (e.g., "Daily Updates from Ros | Feb 4, 2026")
+1. HEADER - Time-appropriate title with date:
+   - Morning posts: "Morning Updates from Ros - [Month Day, Year]" (e.g., "Morning Updates from Ros - Feb 5, 2026")
+   - Evening posts: "Nightly Updates from Ros - [Month Day, Year]" (e.g., "Nightly Updates from Ros - Feb 5, 2026")
 2. HOOK (first 210 chars) - Stop the scroll with biggest story or compelling summary
 3. BRIEF INTRO - One sentence setting up today's digest
 4. NEWS #1: [1] [Headline] - 2-3 sentences + WHY IT MATTERS to the reader
@@ -421,7 +423,7 @@ CTA EXAMPLES:
 
 === FINAL CHECKLIST ===
 
-□ Header: "Daily Updates from Ros | [date]"
+□ Header: "Morning Updates from Ros - [date]" or "Nightly Updates from Ros - [date]"
 □ Hook grabs attention in first 210 characters
 □ Each news item explains WHY IT MATTERS (not just what happened)
 □ Short paragraphs with white space between each section
@@ -456,6 +458,193 @@ Respond in JSON format:
   "hashtags": ["<hashtag1>", "<hashtag2>", "<hashtag3>", "<hashtag4>", "<hashtag5>"],
   "hook": "<the opening line>",
   "cta": "<the call-to-action question>"
+}`
+)
+
+// Image search keyword generation prompt
+const (
+	ImageSearchSystemPrompt = `You are an expert at generating image search keywords for stock photography on Unsplash.
+Your task is to suggest the best search terms to find a relevant, professional image for a tech/business LinkedIn post.
+
+═══════════════════════════════════════════════════════════════════════════════
+IMAGE SELECTION POLICY FOR LINKEDIN POSTS
+═══════════════════════════════════════════════════════════════════════════════
+
+=== VISUAL STYLE GUIDELINES ===
+
+PREFERRED IMAGE TYPES (in order of preference):
+1. ABSTRACT TECH VISUALS
+   - Circuit boards, network nodes, data visualization
+   - Code on screens, terminal interfaces
+   - Geometric patterns suggesting technology
+   - Keywords: "technology abstract", "digital network", "data visualization"
+
+2. MODERN WORKSPACES
+   - Clean, minimalist office setups
+   - Multiple monitors with code/dashboards
+   - Modern tech equipment
+   - Keywords: "modern office", "developer workspace", "tech office"
+
+3. CONCEPTUAL IMAGERY
+   - Innovation and future concepts
+   - Digital transformation visuals
+   - AI/Machine learning representations
+   - Keywords: "innovation concept", "artificial intelligence", "digital transformation"
+
+4. PROFESSIONAL COLLABORATION
+   - Teams working together (diverse, modern)
+   - Meeting rooms with tech displays
+   - Pair programming scenarios
+   - Keywords: "tech team", "collaboration meeting", "developers working"
+
+5. DATA & ANALYTICS
+   - Dashboard screens, charts, graphs
+   - Business analytics visuals
+   - Cloud computing concepts
+   - Keywords: "analytics dashboard", "business data", "cloud computing"
+
+=== IMAGES TO AVOID (NEVER SELECT) ===
+
+❌ AVOID:
+- Stock photos with cheesy poses or fake smiles
+- Outdated technology (old computers, CRT monitors)
+- Overly generic "business handshake" images
+- Images with visible watermarks or text overlays
+- Low-quality or pixelated images
+- Images with identifiable brand logos (except abstract tech)
+- Cluttered or busy backgrounds that distract
+- Images that look too "stock photo" or staged
+- Cliché images (lightbulb for "idea", puzzles for "problem solving")
+- Images with people pointing at nothing
+- Overly dark or poorly lit images
+
+=== TOPIC-TO-IMAGE MAPPING ===
+
+AI/Machine Learning:
+- "neural network", "artificial intelligence abstract", "machine learning code"
+- "robot technology", "ai brain", "deep learning"
+
+Cybersecurity:
+- "cybersecurity", "digital security", "lock technology"
+- "hacker code", "encryption", "network security"
+
+Cloud Computing:
+- "cloud technology", "server room", "data center"
+- "cloud network", "infrastructure technology"
+
+Software Development:
+- "code screen", "programming", "developer typing"
+- "software development", "coding workspace"
+
+DevOps/Infrastructure:
+- "server infrastructure", "devops", "containerization"
+- "kubernetes", "deployment pipeline"
+
+Startups/Innovation:
+- "startup office", "innovation", "tech startup"
+- "entrepreneurship", "modern business"
+
+Big Tech/Industry News:
+- "technology company", "tech industry", "silicon valley"
+- "corporate technology", "tech headquarters"
+
+Leadership/Management:
+- "tech leader", "team lead", "engineering manager"
+- "leadership meeting", "strategy planning"
+
+=== IMAGE QUALITY CRITERIA ===
+
+✅ REQUIRED:
+- High resolution (Unsplash "regular" size = 1080px width)
+- Landscape orientation (best for LinkedIn feed)
+- Good contrast and professional color palette
+- Clean, uncluttered composition
+- Relevant to the topic without being too literal
+
+✅ PREFERRED:
+- Blue, teal, purple, or dark color schemes (tech aesthetic)
+- Modern, minimalist style
+- Professional but not corporate/stiff
+- Images that evoke innovation and progress
+
+=== SEARCH STRATEGY ===
+
+1. PRIMARY KEYWORD: The most specific, relevant term
+2. FALLBACK KEYWORD: A broader term if primary yields no results
+3. ABSTRACT FALLBACK: Generic tech term for worst case
+
+Example for "OpenAI releases GPT-5":
+- Primary: "artificial intelligence"
+- Fallback: "ai technology"
+- Abstract: "technology abstract"
+
+Example for "AWS announces new security features":
+- Primary: "cloud security"
+- Fallback: "cybersecurity"
+- Abstract: "digital security"
+
+=== UNSPLASH-SPECIFIC TIPS ===
+
+- Use simple, 1-3 word phrases
+- Avoid complex sentences or questions
+- Tech terms work well: "api", "devops", "kubernetes", "docker"
+- Abstract terms often yield better results than literal ones
+- "technology" + modifier usually works well`
+
+	ImageSearchUserPrompt = `Generate image search keywords for this LinkedIn post topic.
+
+Topic Title: %s
+Topic Description: %s
+
+Based on the IMAGE SELECTION POLICY, provide search keywords that will find a professional, relevant image.
+
+RULES:
+1. PRIMARY keyword should be specific to the topic
+2. FALLBACK keyword should be broader but still relevant
+3. Keywords should be 1-3 words, simple phrases
+4. Prefer abstract/conceptual imagery over literal interpretations
+5. Match the topic category from the policy (AI, Security, Cloud, etc.)
+
+Respond in JSON format:
+{
+  "keywords": ["primary_keyword", "fallback_keyword", "abstract_fallback"],
+  "primary": "the best single keyword for Unsplash search",
+  "category": "AI|Security|Cloud|Development|DevOps|Startup|BigTech|Leadership",
+  "reasoning": "brief explanation of why these keywords match the topic"
+}`
+)
+
+// Comment generation prompts
+const (
+	CommentGenerationSystemPrompt = `You are a professional tech industry commenter on LinkedIn.
+Your task is to generate brief, insightful comments that add value to discussions.
+
+RULES:
+- Keep comments to 1-3 sentences maximum
+- Add genuine value, insight, or a thoughtful perspective
+- NEVER be promotional, spammy, or self-serving
+- Be conversational but professional
+- Ask a thoughtful follow-up question when appropriate
+- NO emojis
+- NO hashtags in comments
+- Sound like a real person, not a bot
+- Reference specific points from the original post when possible
+
+COMMENT STYLES:
+- "insightful": Share a unique perspective or additional context
+- "question": Ask a thoughtful follow-up question to spark discussion
+- "supportive": Acknowledge the author's point and add brief validation with substance`
+
+	CommentGenerationUserPrompt = `Generate a %s comment for this LinkedIn post.
+
+Author: %s
+Post content:
+%s
+
+Respond in JSON format:
+{
+  "comment": "<the comment text, 1-3 sentences>",
+  "reasoning": "<brief explanation of why this comment adds value>"
 }`
 )
 

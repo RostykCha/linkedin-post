@@ -48,6 +48,7 @@ func (r *Repository) Migrate() error {
 		&models.OAuthToken{},
 		&models.SourceConfig{},
 		&models.Schedule{},
+		&models.Comment{},
 	)
 }
 
@@ -264,4 +265,96 @@ func (r *Repository) GetSchedules(ctx context.Context) ([]*models.Schedule, erro
 
 func (r *Repository) SaveSchedule(ctx context.Context, schedule *models.Schedule) error {
 	return r.db.WithContext(ctx).Save(schedule).Error
+}
+
+// Comment operations
+
+func (r *Repository) CreateComment(ctx context.Context, comment *models.Comment) error {
+	return r.db.WithContext(ctx).Create(comment).Error
+}
+
+func (r *Repository) GetCommentByTargetURN(ctx context.Context, targetURN string) (*models.Comment, error) {
+	var comment models.Comment
+	if err := r.db.WithContext(ctx).Where("target_post_urn = ?", targetURN).First(&comment).Error; err != nil {
+		return nil, err
+	}
+	return &comment, nil
+}
+
+func (r *Repository) ListComments(ctx context.Context, filter storage.CommentFilter) ([]*models.Comment, error) {
+	var comments []*models.Comment
+	query := r.db.WithContext(ctx).Model(&models.Comment{})
+
+	if filter.Status != nil {
+		query = query.Where("status = ?", *filter.Status)
+	}
+
+	// Ordering
+	orderCol := "created_at"
+	if filter.OrderBy != "" {
+		orderCol = filter.OrderBy
+	}
+	if filter.OrderDesc {
+		query = query.Order(orderCol + " DESC")
+	} else {
+		query = query.Order(orderCol + " ASC")
+	}
+
+	// Pagination
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query = query.Offset(filter.Offset)
+	}
+
+	if err := query.Find(&comments).Error; err != nil {
+		return nil, err
+	}
+	return comments, nil
+}
+
+func (r *Repository) UpdateComment(ctx context.Context, comment *models.Comment) error {
+	return r.db.WithContext(ctx).Save(comment).Error
+}
+
+func (r *Repository) GetTodayCommentCount(ctx context.Context) (int, error) {
+	var count int64
+	today := time.Now().Truncate(24 * time.Hour)
+	if err := r.db.WithContext(ctx).Model(&models.Comment{}).
+		Where("status = ? AND created_at >= ?", models.CommentStatusPosted, today).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+func (r *Repository) GetLastCommentTime(ctx context.Context) (*time.Time, error) {
+	var comment models.Comment
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", models.CommentStatusPosted).
+		Order("posted_at DESC").
+		First(&comment).Error; err != nil {
+		return nil, err
+	}
+	return comment.PostedAt, nil
+}
+
+func (r *Repository) GetRecentCommentStyles(ctx context.Context, limit int) ([]string, error) {
+	var comments []*models.Comment
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND comment_style != ''", models.CommentStatusPosted).
+		Order("posted_at DESC").
+		Limit(limit).
+		Find(&comments).Error; err != nil {
+		return nil, err
+	}
+
+	styles := make([]string, 0, len(comments))
+	for _, c := range comments {
+		if c.CommentStyle != "" {
+			styles = append(styles, c.CommentStyle)
+		}
+	}
+	return styles, nil
 }

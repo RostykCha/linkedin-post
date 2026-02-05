@@ -293,6 +293,49 @@ type DigestTopic struct {
 	Source      string
 }
 
+// ImageSearchKeywords represents AI-generated image search terms
+type ImageSearchKeywords struct {
+	Keywords  []string `json:"keywords"`
+	Primary   string   `json:"primary"`
+	Category  string   `json:"category"`
+	Reasoning string   `json:"reasoning"`
+}
+
+// GenerateImageSearchKeywords creates search keywords for finding a relevant stock image
+func (c *Client) GenerateImageSearchKeywords(ctx context.Context, topic *models.Topic) (*ImageSearchKeywords, error) {
+	// Include description for better context-aware keyword generation
+	description := topic.Description
+	if description == "" {
+		description = "No additional description available"
+	}
+
+	userPrompt := fmt.Sprintf(ImageSearchUserPrompt, topic.Title, description)
+
+	response, err := c.CompleteWithJSON(ctx, ImageSearchSystemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	var keywords ImageSearchKeywords
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &keywords); err != nil {
+		c.log.Error().
+			Err(err).
+			Str("response", response).
+			Msg("Failed to parse image search keywords response")
+		return nil, fmt.Errorf("failed to parse image search keywords response: %w", err)
+	}
+
+	c.log.Debug().
+		Str("topic", topic.Title).
+		Str("primary_keyword", keywords.Primary).
+		Str("category", keywords.Category).
+		Strs("keywords", keywords.Keywords).
+		Str("reasoning", keywords.Reasoning).
+		Msg("Generated image search keywords")
+
+	return &keywords, nil
+}
+
 // GeneratedDigest represents an AI-generated daily news digest
 type GeneratedDigest struct {
 	Content  string   `json:"content"`
@@ -303,15 +346,24 @@ type GeneratedDigest struct {
 
 // postProcessDigestContent ensures header and footer are present with correct date
 func postProcessDigestContent(content string) string {
-	today := time.Now().Format("Jan 2, 2006")
-	header := "Daily Updates from Ros - " + today
+	now := time.Now()
+	today := now.Format("Jan 2, 2006")
+
+	// Use "Morning Updates" before noon, "Nightly Updates" after noon
+	headerPrefix := "Morning Updates from Ros"
+	if now.Hour() >= 12 {
+		headerPrefix = "Nightly Updates from Ros"
+	}
+	header := headerPrefix + " | " + today
 	footer := "---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
 
 	// Replace unicode box-drawing characters with simple dashes
 	content = strings.ReplaceAll(content, "━", "-")
 
-	// Fix header with correct date
-	if strings.HasPrefix(content, "Daily Updates from Ros") {
+	// Fix header with correct date - check for various header formats
+	if strings.HasPrefix(content, "Daily Updates from Ros") ||
+		strings.HasPrefix(content, "Morning Updates from Ros") ||
+		strings.HasPrefix(content, "Nightly Updates from Ros") {
 		if idx := strings.Index(content, "\n"); idx != -1 {
 			content = header + content[idx:]
 		}
@@ -359,4 +411,41 @@ func (c *Client) GenerateDigest(ctx context.Context, topics []DigestTopic, brand
 	digest.Content = postProcessDigestContent(digest.Content)
 
 	return &digest, nil
+}
+
+// GeneratedComment represents an AI-generated LinkedIn comment
+type GeneratedComment struct {
+	Comment   string `json:"comment"`
+	Reasoning string `json:"reasoning"`
+}
+
+// GenerateComment creates a contextual comment for a LinkedIn post
+func (c *Client) GenerateComment(ctx context.Context, authorName, postContent, commentStyle string) (*GeneratedComment, error) {
+	if commentStyle == "" {
+		commentStyle = "insightful"
+	}
+
+	userPrompt := fmt.Sprintf(CommentGenerationUserPrompt, commentStyle, authorName, postContent)
+
+	response, err := c.CompleteWithJSON(ctx, CommentGenerationSystemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
+
+	var comment GeneratedComment
+	if err := json.Unmarshal([]byte(stripMarkdownCodeBlock(response)), &comment); err != nil {
+		c.log.Error().
+			Err(err).
+			Str("response", response).
+			Msg("Failed to parse comment response")
+		return nil, fmt.Errorf("failed to parse comment response: %w", err)
+	}
+
+	c.log.Debug().
+		Str("author", authorName).
+		Str("style", commentStyle).
+		Int("comment_length", len(comment.Comment)).
+		Msg("Generated comment")
+
+	return &comment, nil
 }

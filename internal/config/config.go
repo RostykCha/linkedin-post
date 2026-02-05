@@ -20,6 +20,8 @@ type Config struct {
 	Logging    LoggingConfig    `mapstructure:"logging"`
 	Publishing PublishingConfig `mapstructure:"publishing"`
 	Tracker    TrackerConfig    `mapstructure:"tracker"`
+	Media      MediaConfig      `mapstructure:"media"`
+	Commenter  CommenterConfig  `mapstructure:"commenter"`
 }
 
 // DatabaseConfig holds database connection settings
@@ -104,10 +106,11 @@ type CustomConfig struct {
 
 // SchedulerConfig holds scheduler settings
 type SchedulerConfig struct {
-	DiscoveryCron string `mapstructure:"discovery_cron"`
-	DigestCron    string `mapstructure:"digest_cron"`
-	PublishCron   string `mapstructure:"publish_cron"`
-	CleanupCron   string `mapstructure:"cleanup_cron"`
+	DiscoveryCron string   `mapstructure:"discovery_cron"`
+	DigestCron    string   `mapstructure:"digest_cron"`
+	PublishCron   string   `mapstructure:"publish_cron"`    // Single cron (backward compat)
+	PublishCrons  []string `mapstructure:"publish_crons"`   // Multiple publish windows
+	CleanupCron   string   `mapstructure:"cleanup_cron"`
 }
 
 // RateLimitConfig holds rate limiting settings
@@ -140,6 +143,35 @@ type TrackerConfig struct {
 	SheetName          string `mapstructure:"sheet_name"`
 	CredentialsFile    string `mapstructure:"credentials_file"`
 	ServiceAccountJSON string `mapstructure:"service_account_json"`
+}
+
+// MediaConfig holds image/media settings
+type MediaConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	Provider       string `mapstructure:"provider"`         // "unsplash" or "none"
+	UnsplashAPIKey string `mapstructure:"unsplash_api_key"` // Unsplash API access key
+	FallbackToText bool   `mapstructure:"fallback_to_text"` // If image fails, post text-only
+}
+
+// CommenterConfig holds auto-comment settings
+type CommenterConfig struct {
+	Enabled           bool     `mapstructure:"enabled"`
+	MaxCommentsPerDay int      `mapstructure:"max_comments_per_day"` // Limit to avoid spam detection
+	TargetInfluencers []string `mapstructure:"target_influencers"`   // List of person URNs to monitor
+	TargetKeywords    []string `mapstructure:"target_keywords"`      // Keywords to search for posts
+	MinPostEngagement int      `mapstructure:"min_post_engagement"`  // Min likes/reactions to comment
+	MaxPostEngagement int      `mapstructure:"max_post_engagement"`  // Max engagement (skip mega-viral)
+	CommentStyle      string   `mapstructure:"comment_style"`        // insightful, question, supportive
+	// Timing controls to avoid spam detection
+	MinIntervalMinutes int      `mapstructure:"min_interval_minutes"` // Min minutes between comments
+	MaxIntervalMinutes int      `mapstructure:"max_interval_minutes"` // Max minutes for randomization
+	ActiveHoursStart   int      `mapstructure:"active_hours_start"`   // Start hour (0-23)
+	ActiveHoursEnd     int      `mapstructure:"active_hours_end"`     // End hour (0-23)
+	MaxPostAgeHours    int      `mapstructure:"max_post_age_hours"`   // Skip posts older than this
+	MinPostAgeMinutes  int      `mapstructure:"min_post_age_minutes"` // Skip very new posts
+	// Style rotation
+	CommentStyleRotation bool     `mapstructure:"comment_style_rotation"` // Rotate between styles
+	CommentStyles        []string `mapstructure:"comment_styles"`         // Available styles to rotate
 }
 
 // Load loads configuration from file and environment variables
@@ -188,6 +220,8 @@ func Load(configPath string) (*Config, error) {
 	v.BindEnv("tracker.service_account_json", "LINKEDIN_TRACKER_SERVICE_ACCOUNT_JSON")
 	v.BindEnv("publishing.auto_approve", "LINKEDIN_PUBLISHING_AUTO_APPROVE")
 	v.BindEnv("publishing.min_score_threshold", "LINKEDIN_PUBLISHING_MIN_SCORE_THRESHOLD")
+	v.BindEnv("media.enabled", "LINKEDIN_MEDIA_ENABLED")
+	v.BindEnv("media.unsplash_api_key", "LINKEDIN_MEDIA_UNSPLASH_API_KEY")
 
 	// Read config file (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
@@ -237,10 +271,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("sources.custom.enabled", true)
 
 	// Scheduler defaults
-	v.SetDefault("scheduler.discovery_cron", "0 */2 * * *")  // Every 2 hours
-	v.SetDefault("scheduler.digest_cron", "55 7 * * *")      // 7:55am daily - generate digest before publish
-	v.SetDefault("scheduler.publish_cron", "0 8 * * *")      // 8am daily - optimal LinkedIn engagement
-	v.SetDefault("scheduler.cleanup_cron", "0 0 * * 0")      // Weekly cleanup
+	v.SetDefault("scheduler.discovery_cron", "0 */2 * * *") // Every 2 hours
+	v.SetDefault("scheduler.digest_cron", "55 7 * * *")     // 7:55am daily - generate digest before publish
+	v.SetDefault("scheduler.publish_cron", "0 8 * * *")     // 8am daily - single window (backward compat)
+	v.SetDefault("scheduler.publish_crons", []string{       // Multiple publish windows for optimal engagement
+		"0 8 * * *",  // 8:00 AM - morning commute
+		"0 12 * * *", // 12:00 PM - lunch break
+		"0 17 * * *", // 5:00 PM - end of workday
+	})
+	v.SetDefault("scheduler.cleanup_cron", "0 0 * * 0") // Weekly cleanup
 
 	// Rate limit defaults
 	v.SetDefault("rate_limit.linkedin_requests_per_day", 100)
@@ -262,6 +301,28 @@ func setDefaults(v *viper.Viper) {
 	// Tracker defaults
 	v.SetDefault("tracker.enabled", false)
 	v.SetDefault("tracker.sheet_name", "Posts")
+
+	// Media defaults
+	v.SetDefault("media.enabled", false)
+	v.SetDefault("media.provider", "unsplash")
+	v.SetDefault("media.fallback_to_text", true)
+
+	// Commenter defaults
+	v.SetDefault("commenter.enabled", false)
+	v.SetDefault("commenter.max_comments_per_day", 10)
+	v.SetDefault("commenter.min_post_engagement", 50)
+	v.SetDefault("commenter.max_post_engagement", 5000)
+	v.SetDefault("commenter.comment_style", "insightful")
+	// Timing defaults - conservative to avoid spam detection
+	v.SetDefault("commenter.min_interval_minutes", 45)
+	v.SetDefault("commenter.max_interval_minutes", 90)
+	v.SetDefault("commenter.active_hours_start", 8)  // 8 AM
+	v.SetDefault("commenter.active_hours_end", 18)   // 6 PM
+	v.SetDefault("commenter.max_post_age_hours", 24)
+	v.SetDefault("commenter.min_post_age_minutes", 30)
+	// Style rotation
+	v.SetDefault("commenter.comment_style_rotation", true)
+	v.SetDefault("commenter.comment_styles", []string{"insightful", "question", "supportive"})
 }
 
 // Validate validates the configuration

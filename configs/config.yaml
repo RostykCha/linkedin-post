@@ -99,8 +99,11 @@ sources:
 
 scheduler:
   discovery_cron: "0 */1 * * *"    # Every hour (more frequent for news)
-  digest_cron: "55 7 * * *"        # 7:55am daily - generate digest from top topics
-  publish_cron: "0 8 * * *"        # 8am daily - optimal for LinkedIn algorithm engagement
+  digest_cron: "55 7 * * *"        # 7:55am daily - generate morning digest
+  publish_cron: "0 8 * * *"        # Single window (backward compat)
+  publish_crons:                   # Two publish windows per day
+    - "0 8 * * *"                  # 8:00 AM - morning updates
+    - "0 20 * * *"                 # 8:00 PM - nightly updates
   cleanup_cron: "0 0 * * 0"        # Weekly cleanup on Sunday
 
 rate_limit:
@@ -115,7 +118,7 @@ logging:
 
 publishing:
   auto_approve: false      # Set to true for fully autonomous mode
-  max_posts_per_day: 1     # One daily digest with top 3 news
+  max_posts_per_day: 2     # Two posts per day (morning and night)
   min_score_threshold: 75  # Higher threshold for quality news
   default_post_type: "text"
   brand_voice: |
@@ -125,3 +128,84 @@ publishing:
     Add brief analysis on why each story matters.
     Use clear technical language accessible to IT professionals.
     End with a question to spark discussion.
+
+media:
+  enabled: true                    # Enable image attachments with posts
+  provider: "unsplash"             # Image provider (currently only unsplash)
+  unsplash_api_key: "aXU2mMsi5PxjSQAT2coKRlKZXOwDEzfp-huO4EqRYSk"  # Unsplash Access Key
+  fallback_to_text: true           # If image fails, post text-only instead of failing
+
+commenter:
+  enabled: false                   # Set to true to enable auto-commenting
+  max_comments_per_day: 10         # Daily limit to avoid spam detection
+  min_post_engagement: 50          # Only comment on posts with 50+ reactions
+  max_post_engagement: 5000        # Skip mega-viral posts where comments get buried
+  comment_style: "insightful"      # insightful, question, or supportive
+  # Timing controls (anti-spam)
+  min_interval_minutes: 45         # Minimum gap between comments
+  max_interval_minutes: 90         # Max gap (randomized for human-like behavior)
+  active_hours_start: 8            # Only comment during business hours (8 AM)
+  active_hours_end: 18             # Stop commenting at 6 PM
+  max_post_age_hours: 24           # Skip posts older than 24 hours
+  min_post_age_minutes: 30         # Skip very fresh posts
+  # Style rotation
+  comment_style_rotation: true     # Rotate between styles to avoid patterns
+  comment_styles:
+    - "insightful"
+    - "question"
+    - "supportive"
+  # Top 50 IT influencers on LinkedIn (usernames - auto-resolved to URNs)
+  target_influencers:
+    # Tech Leaders & CEOs
+    - "satyanadella"               # Satya Nadella - CEO, Microsoft
+    - "sundarpichai"               # Sundar Pichai - CEO, Google/Alphabet
+    - "jenhsunhuang"               # Jensen Huang - CEO, NVIDIA
+    - "marcbenioff"                # Marc Benioff - CEO, Salesforce
+    - "thegdb"                     # Greg Brockman - President, OpenAI
+    - "fidjisimo"                  # Fidji Simo - CEO Applications, OpenAI
+    # AI & Machine Learning
+    - "andrewyng"                  # Andrew Ng - Founder, DeepLearning.AI
+    - "aravind-srinivas-16051987"  # Aravind Srinivas - CEO, Perplexity AI
+    - "marc-beierschoder"          # Marc Beierschoder - AI Lead, Deloitte
+    # Software Engineering & Architecture
+    - "alexxubyte"                 # Alex Xu - Co-founder, ByteByteGo
+    - "gergelyorosz"               # Gergely Orosz - The Pragmatic Engineer
+    - "milan-jovanovic"            # Milan Jovanović - Backend/Distributed Systems
+    - "addyosmani"                 # Addy Osmani - Head Chrome DevEx, Google
+    - "sahnlam"                    # Sahn Lam - Co-founder, ByteByteGo
+    - "ryanlpeterman"              # Ryan Peterman - ML Infra, Meta
+    - "alexander-chiou"            # Alex Chiou - Co-founder, Taro
+    - "brijpandeyji"               # Brij Kishore Pandey - Principal Engineer, ADP
+    - "david-heinemeier-hansson-374b18221"  # DHH - Creator of Rails
+    # Engineering Leadership
+    - "irinastanescu"              # Irina Stanescu - Engineering Leader
+    - "gregorojstersek"            # Gregor Ojstersek - Engineering Leader
+    - "lucaronin"                  # Luca Rossi - Founder, Refactoring
+    # Data Engineering & Science
+    - "eczachly"                   # Zach Wilson - Founder, DataExpert.io
+    - "shashank219"                # Shashank Mishra - Staff Data Engineer, Prophecy
+    - "meri-nova"                  # Meri Nova - Founder, Break Into Data
+    # Product & UX
+    - "zanderwhitehurst"           # Zander Whitehurst - UX Designer, Memorisely
+    - "adhamdannaway"              # Adham Dannaway - UI/UX Designer
+    # Tech Entrepreneurship
+    - "anupammittal007"            # Anupam Mittal - Founder, Shaadi.com
+    # Fintech & Innovation
+    - "sarah-friar"                # Sarah Friar - CFO, OpenAI
+    - "kevinweil"                  # Kevin Weil - VP, OpenAI
+    # More Engineering Voices
+    - "gabag26"                    # Sahil Gaba - Software Engineer, Google
+    - "ginacostag"                 # Gina Acosta Gutiérrez - Data Scientist
+    - "eric-vyacheslav-156273169"  # Eric Vyacheslav - AI/ML Engineer
+    - "alexwang2911"               # Alex Wang - Data Scientist
+    # Additional Influencers (search for usernames)
+    - "abrahamjohn90"              # Abraham John - UI/UX Designer
+  target_keywords:                 # Keywords to identify relevant posts
+    - "AI"
+    - "cloud computing"
+    - "DevOps"
+    - "software engineering"
+    - "machine learning"
+    - "system design"
+    - "data engineering"
+    - "tech leadership"

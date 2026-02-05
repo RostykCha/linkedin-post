@@ -39,6 +39,15 @@ type Repository interface {
 	GetSchedules(ctx context.Context) ([]*models.Schedule, error)
 	SaveSchedule(ctx context.Context, schedule *models.Schedule) error
 
+	// Comment operations
+	CreateComment(ctx context.Context, comment *models.Comment) error
+	GetCommentByTargetURN(ctx context.Context, targetURN string) (*models.Comment, error)
+	ListComments(ctx context.Context, filter CommentFilter) ([]*models.Comment, error)
+	UpdateComment(ctx context.Context, comment *models.Comment) error
+	GetTodayCommentCount(ctx context.Context) (int, error)
+	GetLastCommentTime(ctx context.Context) (*time.Time, error)
+	GetRecentCommentStyles(ctx context.Context, limit int) ([]string, error)
+
 	// Maintenance
 	Close() error
 	Migrate() error
@@ -78,6 +87,24 @@ func DefaultTopicFilter() TopicFilter {
 // DefaultPostFilter returns a filter with sensible defaults
 func DefaultPostFilter() PostFilter {
 	return PostFilter{
+		Limit:     50,
+		OrderBy:   "created_at",
+		OrderDesc: true,
+	}
+}
+
+// CommentFilter defines filtering options for comments
+type CommentFilter struct {
+	Status    *models.CommentStatus
+	Limit     int
+	Offset    int
+	OrderBy   string
+	OrderDesc bool
+}
+
+// DefaultCommentFilter returns a filter with sensible defaults
+func DefaultCommentFilter() CommentFilter {
+	return CommentFilter{
 		Limit:     50,
 		OrderBy:   "created_at",
 		OrderDesc: true,

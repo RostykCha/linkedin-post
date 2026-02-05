@@ -12,11 +12,13 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 
+	"github.com/linkedin-agent/internal/agent/commenter"
 	"github.com/linkedin-agent/internal/agent/discovery"
 	"github.com/linkedin-agent/internal/agent/publisher"
 	"github.com/linkedin-agent/internal/ai"
 	"github.com/linkedin-agent/internal/config"
 	"github.com/linkedin-agent/internal/linkedin"
+	"github.com/linkedin-agent/internal/media/unsplash"
 	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/internal/source"
 	"github.com/linkedin-agent/internal/source/custom"
@@ -123,6 +125,20 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 	discoveryAgent := discovery.NewAgent(sourceManager, aiClient, repo, log)
 	publisherAgent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
 
+	// Configure media support if enabled
+	if cfg.Media.Enabled && cfg.Media.UnsplashAPIKey != "" {
+		unsplashClient := unsplash.NewClient(cfg.Media.UnsplashAPIKey, log)
+		publisherAgent.SetMediaConfig(cfg.Media, unsplashClient)
+		log.Info().Msg("Media support enabled with Unsplash")
+	}
+
+	// Create commenter agent if enabled
+	var commenterAgent *commenter.Agent
+	if cfg.Commenter.Enabled {
+		commenterAgent = commenter.NewAgent(aiClient, linkedinClient, repo, cfg.Commenter, log)
+		log.Info().Msg("Commenter agent enabled")
+	}
+
 	// Create cron scheduler
 	c := cron.New(cron.WithLogger(cronLogger{log}))
 
@@ -175,27 +191,81 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 	}
 	log.Info().Str("cron", cfg.Scheduler.DigestCron).Msg("Digest job scheduled")
 
-	// Schedule publish job
-	_, err = c.AddFunc(cfg.Scheduler.PublishCron, func() {
-		ctx := context.Background()
-		log.Info().Msg("Running scheduled publish")
-
-		published, errors := publisherAgent.ProcessScheduledPosts(ctx)
-		if len(errors) > 0 {
-			for _, e := range errors {
-				log.Error().Err(e).Msg("Publish error")
-			}
-		}
-
-		log.Info().
-			Int("published", published).
-			Int("errors", len(errors)).
-			Msg("Scheduled publish completed")
-	})
-	if err != nil {
-		return fmt.Errorf("failed to schedule publish job: %w", err)
+	// Schedule publish jobs - support multiple windows or single cron
+	publishCrons := cfg.Scheduler.PublishCrons
+	if len(publishCrons) == 0 {
+		// Fallback to single publish_cron for backward compatibility
+		publishCrons = []string{cfg.Scheduler.PublishCron}
 	}
-	log.Info().Str("cron", cfg.Scheduler.PublishCron).Msg("Publish job scheduled")
+
+	for i, publishCron := range publishCrons {
+		windowIndex := i
+		cronExpr := publishCron
+		_, err = c.AddFunc(cronExpr, func() {
+			ctx := context.Background()
+			log.Info().Int("window", windowIndex).Msg("Running scheduled publish")
+
+			// Check daily limit before publishing
+			todayCount, err := publisherAgent.GetTodayPublishCount(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to get today's publish count")
+			} else if todayCount >= publisherAgent.GetMaxPostsPerDay() {
+				log.Info().
+					Int("published_today", todayCount).
+					Int("max_per_day", publisherAgent.GetMaxPostsPerDay()).
+					Msg("Daily publish limit reached, skipping")
+				return
+			}
+
+			published, errors := publisherAgent.ProcessScheduledPosts(ctx)
+			if len(errors) > 0 {
+				for _, e := range errors {
+					log.Error().Err(e).Msg("Publish error")
+				}
+			}
+
+			log.Info().
+				Int("window", windowIndex).
+				Int("published", published).
+				Int("errors", len(errors)).
+				Int("today_total", todayCount+published).
+				Msg("Scheduled publish completed")
+		})
+		if err != nil {
+			return fmt.Errorf("failed to schedule publish job %d: %w", windowIndex, err)
+		}
+		log.Info().Int("window", windowIndex).Str("cron", cronExpr).Msg("Publish job scheduled")
+	}
+
+	// Schedule comment job if enabled
+	// Runs every 30 minutes - the agent decides internally if it should post
+	// based on active hours and time since last comment
+	if commenterAgent != nil {
+		_, err = c.AddFunc("*/30 * * * *", func() {
+			ctx := context.Background()
+			log.Debug().Msg("Running scheduled comment check")
+
+			result, err := commenterAgent.Run(ctx)
+			if err != nil {
+				log.Error().Err(err).Msg("Scheduled comment job failed")
+				return
+			}
+
+			// Only log at Info level if something actually happened
+			if result.CommentsPosted > 0 || result.PostsDiscovered > 0 {
+				log.Info().
+					Int("posts_discovered", result.PostsDiscovered).
+					Int("comments_posted", result.CommentsPosted).
+					Int("comments_skipped", result.CommentsSkipped).
+					Dur("duration", result.Duration).
+					Msg("Comment job completed")
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("failed to schedule comment job: %w", err)
+		}
+		log.Info().Str("cron", "*/30 * * * *").Msg("Comment job scheduled (agent controls timing)")
+	}
 
 	// Start scheduler
 	c.Start()

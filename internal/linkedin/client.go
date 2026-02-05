@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"strings"
@@ -18,8 +19,9 @@ import (
 
 const (
 	baseURL         = "https://api.linkedin.com/v2"
+	restBaseURL     = "https://api.linkedin.com/rest" // For newer REST APIs (Images, etc.)
 	restliVersion   = "2.0.0"
-	linkedinVersion = "202401" // LinkedIn API version
+	linkedinVersion = "202601" // LinkedIn API version (YYYYMM format)
 )
 
 // Client handles LinkedIn API requests
@@ -28,6 +30,7 @@ type Client struct {
 	oauthManager *OAuthManager
 	rateLimiter  *ratelimit.MultiLimiter
 	log          *logger.Logger
+	urnCache     map[string]string // Cache for username -> URN mappings
 }
 
 // NewClient creates a new LinkedIn API client
@@ -39,6 +42,7 @@ func NewClient(oauth *OAuthManager, limiter *ratelimit.MultiLimiter, log *logger
 		oauthManager: oauth,
 		rateLimiter:  limiter,
 		log:          log.WithComponent("linkedin"),
+		urnCache:     make(map[string]string),
 	}
 }
 
@@ -103,6 +107,61 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 	return resp, nil
 }
 
+// doREST performs an HTTP request to the REST API (for newer endpoints like Images API)
+func (c *Client) doREST(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+	// Wait for rate limiter
+	if err := c.rateLimiter.Wait(ctx, ratelimit.LimiterLinkedIn); err != nil {
+		return nil, fmt.Errorf("rate limit error: %w", err)
+	}
+
+	// Get valid token
+	token, err := c.oauthManager.GetValidToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authentication error: %w", err)
+	}
+
+	// Prepare request body
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+		c.log.Info().
+			Int("body_length", len(data)).
+			Msg("LinkedIn REST API request body")
+	}
+
+	// Create request using REST base URL
+	req, err := http.NewRequestWithContext(ctx, method, restBaseURL+path, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set required headers for REST API
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	req.Header.Set("X-Restli-Protocol-Version", restliVersion)
+	req.Header.Set("LinkedIn-Version", linkedinVersion)
+	req.Header.Set("Content-Type", "application/json")
+
+	c.log.Debug().
+		Str("method", method).
+		Str("url", restBaseURL+path).
+		Msg("Making LinkedIn REST API request")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	c.log.Debug().
+		Int("status", resp.StatusCode).
+		Msg("LinkedIn REST API response")
+
+	return resp, nil
+}
+
 // GetProfile retrieves the authenticated user's profile
 func (c *Client) GetProfile(ctx context.Context) (*Profile, error) {
 	resp, err := c.do(ctx, "GET", "/userinfo", nil)
@@ -135,12 +194,108 @@ type Profile struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
+// ResolveToURN converts a LinkedIn identifier (username or URN) to a URN format.
+// If the input is already a URN (starts with "urn:li:"), it returns as-is.
+// If it's a username, it attempts to resolve it to a URN via the API.
+func (c *Client) ResolveToURN(ctx context.Context, identifier string) (string, error) {
+	// If already a URN, return as-is
+	if strings.HasPrefix(identifier, "urn:li:") {
+		return identifier, nil
+	}
+
+	// Check cache first
+	if urn, ok := c.urnCache[identifier]; ok {
+		return urn, nil
+	}
+
+	// Try to resolve username to URN via LinkedIn API
+	// LinkedIn's /people endpoint can look up by vanity name
+	urn, err := c.lookupUserByVanityName(ctx, identifier)
+	if err != nil {
+		c.log.Warn().
+			Err(err).
+			Str("identifier", identifier).
+			Msg("Failed to resolve username to URN, using as person URN directly")
+		// Fallback: assume it might be a raw member ID
+		urn = fmt.Sprintf("urn:li:person:%s", identifier)
+	}
+
+	// Cache the result
+	c.urnCache[identifier] = urn
+	return urn, nil
+}
+
+// lookupUserByVanityName attempts to get a user's URN from their LinkedIn vanity URL name
+func (c *Client) lookupUserByVanityName(ctx context.Context, vanityName string) (string, error) {
+	// LinkedIn API endpoint for profile lookup by vanity name
+	// Note: This requires specific API permissions and may not be available to all apps
+	endpoint := fmt.Sprintf("/people/(vanityName:%s)", vanityName)
+
+	resp, err := c.do(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup user: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("user lookup failed: %s - %s", resp.Status, string(body))
+	}
+
+	// Parse response to extract the member URN
+	var result struct {
+		ID string `json:"id"` // This should be the member URN
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse user lookup response: %w", err)
+	}
+
+	if result.ID == "" {
+		return "", fmt.Errorf("no ID found in response")
+	}
+
+	// Ensure it's in URN format
+	if !strings.HasPrefix(result.ID, "urn:li:") {
+		result.ID = fmt.Sprintf("urn:li:person:%s", result.ID)
+	}
+
+	c.log.Debug().
+		Str("vanity_name", vanityName).
+		Str("urn", result.ID).
+		Msg("Resolved username to URN")
+
+	return result.ID, nil
+}
+
+// ResolveMultipleToURNs resolves multiple identifiers to URNs
+// Returns a map of original identifier -> resolved URN
+func (c *Client) ResolveMultipleToURNs(ctx context.Context, identifiers []string) (map[string]string, []error) {
+	results := make(map[string]string)
+	var errors []error
+
+	for _, id := range identifiers {
+		urn, err := c.ResolveToURN(ctx, id)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to resolve %s: %w", id, err))
+			// Still store the fallback URN
+			urn = fmt.Sprintf("urn:li:person:%s", id)
+		}
+		results[id] = urn
+	}
+
+	return results, errors
+}
+
 // LinkedIn content limits
 const maxCommentaryLength = 3000
 
 // sanitizeForLinkedIn cleans content to ensure LinkedIn API accepts it properly
 // LinkedIn's API can have issues with certain unicode characters
 func sanitizeForLinkedIn(content string) string {
+	// Decode HTML entities first (e.g., &#8217; -> ', &amp; -> &)
+	content = html.UnescapeString(content)
+
 	// Replace common unicode box-drawing and decorative characters with ASCII equivalents
 	replacements := map[string]string{
 		"━": "-",
@@ -199,6 +354,7 @@ func sanitizeForLinkedIn(content string) string {
 		"\u200C": "",  // Zero-width non-joiner
 		"\u200D": "",  // Zero-width joiner
 		"\uFEFF": "",  // BOM
+		"|":      "-", // Pipe character can cause issues with LinkedIn display
 	}
 
 	for old, new := range replacements {

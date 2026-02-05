@@ -749,6 +749,8 @@ func postHeaders() []string {
 		"GenerationPrompt", "AIMetadata", "LinkedInPostURN",
 		"Status", "ScheduledFor", "PublishedAt", "ErrorMessage",
 		"RetryCount", "CreatedAt", "UpdatedAt",
+		// Media fields
+		"MediaType", "MediaURL", "MediaAssetURN",
 	}
 }
 
@@ -798,6 +800,10 @@ func postToRow(p *models.Post) []interface{} {
 		p.RetryCount,
 		p.CreatedAt.Format(time.RFC3339),
 		p.UpdatedAt.Format(time.RFC3339),
+		// Media fields (columns 15-17)
+		string(p.MediaType),
+		p.MediaURL,
+		p.MediaAssetURN,
 	}
 }
 
@@ -859,6 +865,15 @@ func rowToPost(row []interface{}) *models.Post {
 	p.CreatedAt = parseTime(row, 13)
 	p.UpdatedAt = parseTime(row, 14)
 
+	// Media fields (columns 15-17) - optional for backward compatibility
+	if mt := parseString(row, 15); mt != "" {
+		p.MediaType = models.MediaType(mt)
+	} else {
+		p.MediaType = models.MediaTypeNone
+	}
+	p.MediaURL = parseString(row, 16)
+	p.MediaAssetURN = parseString(row, 17)
+
 	return p
 }
 
@@ -905,4 +920,35 @@ func parseTime(row []interface{}, idx int) time.Time {
 		return t
 	}
 	return time.Time{}
+}
+
+// ============ COMMENT OPERATIONS (not supported in Sheets) ============
+// Comments are only supported in SQLite storage for now
+
+func (r *Repository) CreateComment(ctx context.Context, comment *models.Comment) error {
+	return fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) GetCommentByTargetURN(ctx context.Context, targetURN string) (*models.Comment, error) {
+	return nil, fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) ListComments(ctx context.Context, filter storage.CommentFilter) ([]*models.Comment, error) {
+	return nil, fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) UpdateComment(ctx context.Context, comment *models.Comment) error {
+	return fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) GetTodayCommentCount(ctx context.Context) (int, error) {
+	return 0, fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) GetLastCommentTime(ctx context.Context) (*time.Time, error) {
+	return nil, fmt.Errorf("comment operations not supported in Google Sheets storage")
+}
+
+func (r *Repository) GetRecentCommentStyles(ctx context.Context, limit int) ([]string, error) {
+	return nil, fmt.Errorf("comment operations not supported in Google Sheets storage")
 }

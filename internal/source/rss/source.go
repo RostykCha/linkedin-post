@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"html"
 	"strings"
 	"time"
 
@@ -106,8 +107,11 @@ func (s *Source) HealthCheck(ctx context.Context) error {
 	return err
 }
 
-// cleanText removes HTML tags and extra whitespace
+// cleanText removes HTML tags, decodes HTML entities, and cleans whitespace
 func cleanText(text string) string {
+	// Decode HTML entities first (e.g., &#8217; -> ', &amp; -> &)
+	text = html.UnescapeString(text)
+
 	// Remove HTML tags (simple approach)
 	text = strings.ReplaceAll(text, "<br>", " ")
 	text = strings.ReplaceAll(text, "<br/>", " ")

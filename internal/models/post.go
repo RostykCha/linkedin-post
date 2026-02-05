@@ -13,6 +13,14 @@ const (
 	PostTypeArticle PostType = "article"
 )
 
+// MediaType represents the type of media attached to a post
+type MediaType string
+
+const (
+	MediaTypeNone  MediaType = "none"
+	MediaTypeImage MediaType = "image"
+)
+
 // PostStatus represents the current state of a post
 type PostStatus string
 
@@ -40,8 +48,12 @@ type Post struct {
 	PublishedAt      *time.Time `json:"published_at"`
 	ErrorMessage     string     `json:"error_message"`
 	RetryCount       int        `gorm:"default:0" json:"retry_count"`
-	CreatedAt        time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	// Media fields for image posts
+	MediaType     MediaType `gorm:"size:20;default:'none'" json:"media_type"`
+	MediaURL      string    `gorm:"size:500" json:"media_url"`       // Source URL (e.g., Unsplash)
+	MediaAssetURN string    `gorm:"size:255" json:"media_asset_urn"` // LinkedIn asset URN after upload
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 // PollOption represents a single option in a LinkedIn poll

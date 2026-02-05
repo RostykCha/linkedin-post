@@ -3,11 +3,14 @@ package publisher
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	"github.com/linkedin-agent/internal/ai"
 	"github.com/linkedin-agent/internal/config"
 	"github.com/linkedin-agent/internal/linkedin"
+	"github.com/linkedin-agent/internal/media/unsplash"
 	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/internal/storage"
 	"github.com/linkedin-agent/internal/tracker"
@@ -16,12 +19,14 @@ import (
 
 // Agent handles content generation and publishing to LinkedIn
 type Agent struct {
-	aiClient       *ai.Client
-	linkedinClient *linkedin.Client
-	repository     storage.Repository
-	config         config.PublishingConfig
-	log            *logger.Logger
-	tracker        *tracker.SheetsTracker
+	aiClient        *ai.Client
+	linkedinClient  *linkedin.Client
+	repository      storage.Repository
+	config          config.PublishingConfig
+	mediaConfig     config.MediaConfig
+	unsplashClient  *unsplash.Client
+	log             *logger.Logger
+	tracker         *tracker.SheetsTracker
 }
 
 // NewAgent creates a new publisher agent
@@ -44,6 +49,12 @@ func NewAgent(
 // SetTracker sets the Google Sheets tracker for the agent
 func (a *Agent) SetTracker(t *tracker.SheetsTracker) {
 	a.tracker = t
+}
+
+// SetMediaConfig configures media/image support for the agent
+func (a *Agent) SetMediaConfig(mediaCfg config.MediaConfig, unsplashClient *unsplash.Client) {
+	a.mediaConfig = mediaCfg
+	a.unsplashClient = unsplashClient
 }
 
 // GenerateResult contains the result of content generation
@@ -113,6 +124,13 @@ func (a *Agent) GenerateContent(ctx context.Context, topicID uint, postType mode
 		}
 	}
 
+	// Attach image if media is enabled (before saving so image info is persisted)
+	if a.mediaConfig.Enabled && a.unsplashClient != nil && postType == models.PostTypeText {
+		if err := a.AttachImageToPost(ctx, post, topic); err != nil {
+			a.log.Warn().Err(err).Msg("Failed to attach image to post, will publish as text-only")
+		}
+	}
+
 	// Save draft
 	if err := a.repository.CreatePost(ctx, post); err != nil {
 		return nil, fmt.Errorf("failed to save post: %w", err)
@@ -159,6 +177,90 @@ type PublishResult struct {
 	Error       error
 }
 
+// AttachImageToPost fetches an image from Unsplash and attaches it to the post
+func (a *Agent) AttachImageToPost(ctx context.Context, post *models.Post, topic *models.Topic) error {
+	if !a.mediaConfig.Enabled || a.unsplashClient == nil {
+		return nil
+	}
+
+	// Generate search keywords from topic
+	keywords, err := a.aiClient.GenerateImageSearchKeywords(ctx, topic)
+	if err != nil {
+		a.log.Warn().Err(err).Msg("Failed to generate image search keywords, using topic title")
+		keywords = &ai.ImageSearchKeywords{Primary: topic.Title}
+	}
+
+	// Search for a photo
+	photo, err := a.unsplashClient.GetBestPhoto(ctx, keywords.Primary)
+	if err != nil {
+		a.log.Warn().Err(err).Str("keyword", keywords.Primary).Msg("Failed to find image")
+		return err
+	}
+
+	// Store the photo URL (we'll download and upload during publish)
+	post.MediaType = models.MediaTypeImage
+	post.MediaURL = photo.URLs.Regular
+
+	// Store attribution in AI metadata
+	if post.AIMetadata == nil {
+		post.AIMetadata = models.JSON{}
+	}
+	post.AIMetadata["image_attribution"] = a.unsplashClient.GetAttribution(photo)
+	post.AIMetadata["image_id"] = photo.ID
+
+	a.log.Info().
+		Str("photo_id", photo.ID).
+		Str("photographer", photo.User.Name).
+		Str("keyword", keywords.Primary).
+		Msg("Image attached to post")
+
+	return nil
+}
+
+// publishWithImage handles publishing a post with an image attachment
+func (a *Agent) publishWithImage(ctx context.Context, post *models.Post) (string, error) {
+	// Download directly from stored MediaURL
+	if post.MediaURL == "" {
+		a.log.Warn().Msg("No image URL found, falling back to text post")
+		return a.linkedinClient.CreatePost(ctx, post)
+	}
+
+	a.log.Info().
+		Str("media_url", post.MediaURL).
+		Msg("Downloading image from stored URL")
+
+	// Download the image directly from the stored URL
+	imageData, err := a.downloadImageFromURL(ctx, post.MediaURL)
+	if err != nil || len(imageData) == 0 {
+		if a.mediaConfig.FallbackToText {
+			a.log.Warn().Err(err).Msg("Failed to download image, falling back to text post")
+			return a.linkedinClient.CreatePost(ctx, post)
+		}
+		return "", fmt.Errorf("failed to download image: %w", err)
+	}
+
+	// Upload to LinkedIn and create post
+	postURN, assetURN, err := a.linkedinClient.UploadAndCreateImagePost(ctx, post, imageData)
+	if err != nil {
+		if a.mediaConfig.FallbackToText {
+			a.log.Warn().Err(err).Msg("Failed to upload image to LinkedIn, falling back to text post")
+			return a.linkedinClient.CreatePost(ctx, post)
+		}
+		return "", err
+	}
+
+	// Store the asset URN
+	post.MediaAssetURN = assetURN
+
+	a.log.Info().
+		Str("post_urn", postURN).
+		Str("asset_urn", assetURN).
+		Int("image_size", len(imageData)).
+		Msg("Image post published successfully")
+
+	return postURN, nil
+}
+
 // Publish publishes a post to LinkedIn
 func (a *Agent) Publish(ctx context.Context, postID uint) (*PublishResult, error) {
 	result := &PublishResult{PostID: postID}
@@ -201,7 +303,12 @@ func (a *Agent) Publish(ctx context.Context, postID uint) (*PublishResult, error
 			urn, err = a.linkedinClient.CreatePoll(ctx, question, options, 3)
 		}
 	default:
-		urn, err = a.linkedinClient.CreatePost(ctx, post)
+		// Check if post has image to upload
+		if post.MediaType == models.MediaTypeImage && post.MediaURL != "" && a.unsplashClient != nil {
+			urn, err = a.publishWithImage(ctx, post)
+		} else {
+			urn, err = a.linkedinClient.CreatePost(ctx, post)
+		}
 	}
 
 	if err != nil {
@@ -273,6 +380,32 @@ func (a *Agent) ProcessScheduledPosts(ctx context.Context) (int, []error) {
 	}
 
 	return published, errors
+}
+
+// GetTodayPublishCount returns the number of posts published today
+func (a *Agent) GetTodayPublishCount(ctx context.Context) (int, error) {
+	status := models.PostStatusPublished
+	posts, err := a.repository.ListPosts(ctx, storage.PostFilter{
+		Status: &status,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	// Count posts published today
+	today := time.Now().Truncate(24 * time.Hour)
+	count := 0
+	for _, p := range posts {
+		if p.PublishedAt != nil && p.PublishedAt.After(today) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// GetMaxPostsPerDay returns the configured maximum posts per day
+func (a *Agent) GetMaxPostsPerDay() int {
+	return a.config.MaxPostsPerDay
 }
 
 // SchedulePost schedules a post for future publishing
@@ -378,6 +511,13 @@ func (a *Agent) GenerateDigest(ctx context.Context) (*DigestResult, error) {
 		Status: models.PostStatusDraft,
 	}
 
+	// Attach image if media is enabled (use first/top topic for image keywords)
+	if a.mediaConfig.Enabled && a.unsplashClient != nil {
+		if err := a.AttachImageToPost(ctx, post, topics[0]); err != nil {
+			a.log.Warn().Err(err).Msg("Failed to attach image to digest, will publish as text-only")
+		}
+	}
+
 	// Save draft
 	if err := a.repository.CreatePost(ctx, post); err != nil {
 		return nil, fmt.Errorf("failed to save digest post: %w", err)
@@ -403,4 +543,34 @@ func (a *Agent) GenerateDigest(ctx context.Context) (*DigestResult, error) {
 		Preview:  post.Content,
 		TopicIDs: topicIDs,
 	}, nil
+}
+
+// downloadImageFromURL downloads an image from a URL and returns the raw bytes
+func (a *Agent) downloadImageFromURL(ctx context.Context, imageURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", imageURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("image download failed with status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image data: %w", err)
+	}
+
+	a.log.Info().
+		Int("size_bytes", len(data)).
+		Msg("Image downloaded successfully")
+
+	return data, nil
 }
