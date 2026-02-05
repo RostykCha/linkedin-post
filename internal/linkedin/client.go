@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/pkg/logger"
@@ -61,7 +63,14 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 		reqBody = bytes.NewReader(data)
-		c.log.Debug().RawJSON("body", data).Msg("Request body")
+		previewLen := 500
+		if len(data) < previewLen {
+			previewLen = len(data)
+		}
+		c.log.Info().
+			Int("body_length", len(data)).
+			Str("body_preview", string(data[:previewLen])).
+			Msg("LinkedIn API request body")
 	}
 
 	// Create request
@@ -126,6 +135,98 @@ type Profile struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
+// LinkedIn content limits
+const maxCommentaryLength = 3000
+
+// sanitizeForLinkedIn cleans content to ensure LinkedIn API accepts it properly
+// LinkedIn's API can have issues with certain unicode characters
+func sanitizeForLinkedIn(content string) string {
+	// Replace common unicode box-drawing and decorative characters with ASCII equivalents
+	replacements := map[string]string{
+		"━": "-",
+		"─": "-",
+		"═": "=",
+		"│": "|",
+		"║": "|",
+		"╔": "+",
+		"╗": "+",
+		"╚": "+",
+		"╝": "+",
+		"╠": "+",
+		"╣": "+",
+		"╦": "+",
+		"╩": "+",
+		"╬": "+",
+		"┌": "+",
+		"┐": "+",
+		"└": "+",
+		"┘": "+",
+		"├": "+",
+		"┤": "+",
+		"┬": "+",
+		"┴": "+",
+		"┼": "+",
+		"•": "-",
+		"◦": "-",
+		"▪": "-",
+		"▫": "-",
+		"►": ">",
+		"◄": "<",
+		"▲": "^",
+		"▼": "v",
+		"★": "*",
+		"☆": "*",
+		"✓": "[x]",
+		"✗": "[ ]",
+		"✔": "[x]",
+		"✘": "[ ]",
+		"□": "[ ]",
+		"■": "[x]",
+		"⚠": "[!]",
+		"❌": "[x]",
+		"✅": "[ok]",
+		"→": "->",
+		"←": "<-",
+		"↑": "^",
+		"↓": "v",
+		"⇒": "=>",
+		"⇐": "<=",
+		"\u00A0": " ", // Non-breaking space
+		"\u2003": " ", // Em space
+		"\u2002": " ", // En space
+		"\u2009": " ", // Thin space
+		"\u200B": "",  // Zero-width space
+		"\u200C": "",  // Zero-width non-joiner
+		"\u200D": "",  // Zero-width joiner
+		"\uFEFF": "",  // BOM
+	}
+
+	for old, new := range replacements {
+		content = strings.ReplaceAll(content, old, new)
+	}
+
+	// Remove any remaining non-printable control characters (except newlines and tabs)
+	var result strings.Builder
+	result.Grow(len(content))
+	for _, r := range content {
+		if r == '\n' || r == '\r' || r == '\t' || (unicode.IsPrint(r) && r < 0x10000) {
+			result.WriteRune(r)
+		}
+	}
+
+	// Normalize line endings to just \n (LinkedIn handles this fine)
+	content = result.String()
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+
+	// Remove any sequences of more than 2 consecutive newlines
+	for strings.Contains(content, "\n\n\n") {
+		content = strings.ReplaceAll(content, "\n\n\n", "\n\n")
+	}
+
+	return strings.TrimSpace(content)
+}
+
 // CreatePost publishes a text post to LinkedIn
 func (c *Client) CreatePost(ctx context.Context, post *models.Post) (string, error) {
 	// Get user profile to get the author URN
@@ -134,10 +235,28 @@ func (c *Client) CreatePost(ctx context.Context, post *models.Post) (string, err
 		return "", fmt.Errorf("failed to get profile: %w", err)
 	}
 
+	// Sanitize content to remove problematic unicode characters
+	content := sanitizeForLinkedIn(post.Content)
+
+	c.log.Info().
+		Int("original_length", len(post.Content)).
+		Int("sanitized_length", len(content)).
+		Msg("Content sanitized for LinkedIn")
+
+	// Truncate content if it exceeds LinkedIn's limit
+	if len(content) > maxCommentaryLength {
+		c.log.Warn().
+			Int("original_length", len(content)).
+			Int("max_length", maxCommentaryLength).
+			Msg("Content exceeds LinkedIn limit, truncating")
+		// Truncate at a reasonable point (try to find last complete paragraph)
+		content = content[:maxCommentaryLength-3] + "..."
+	}
+
 	// Build the post request
 	postReq := PostRequest{
 		Author:     fmt.Sprintf("urn:li:person:%s", profile.Sub),
-		Commentary: post.Content,
+		Commentary: content,
 		Visibility: "PUBLIC",
 		Distribution: Distribution{
 			FeedDistribution:               "MAIN_FEED",
@@ -201,6 +320,12 @@ func (c *Client) CreatePoll(ctx context.Context, question string, options []stri
 	profile, err := c.GetProfile(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get profile: %w", err)
+	}
+
+	// Sanitize question and options
+	question = sanitizeForLinkedIn(question)
+	for i, opt := range options {
+		options[i] = sanitizeForLinkedIn(opt)
 	}
 
 	// Map duration to LinkedIn format

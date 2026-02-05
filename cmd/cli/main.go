@@ -19,6 +19,7 @@ import (
 	"github.com/linkedin-agent/internal/source/custom"
 	"github.com/linkedin-agent/internal/source/rss"
 	"github.com/linkedin-agent/internal/storage"
+	"github.com/linkedin-agent/internal/storage/sheets"
 	"github.com/linkedin-agent/internal/storage/sqlite"
 	"github.com/linkedin-agent/internal/tracker"
 	"github.com/linkedin-agent/pkg/logger"
@@ -73,10 +74,25 @@ func initializeApp(cmd *cobra.Command, args []string) error {
 		Output: cfg.Logging.Output,
 	})
 
-	// Initialize database
-	repo, err = sqlite.New(cfg.Database.DSN)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+	// Initialize storage based on configuration
+	// Use Google Sheets as database when tracker is enabled and has credentials
+	if cfg.Tracker.Enabled && (cfg.Tracker.ServiceAccountJSON != "" || cfg.Tracker.CredentialsFile != "") {
+		log.Info().Msg("Using Google Sheets as primary storage")
+		repo, err = sheets.New(sheets.Config{
+			SpreadsheetID:      cfg.Tracker.SpreadsheetID,
+			ServiceAccountJSON: cfg.Tracker.ServiceAccountJSON,
+			CredentialsFile:    cfg.Tracker.CredentialsFile,
+		}, log)
+		if err != nil {
+			return fmt.Errorf("failed to connect to Google Sheets: %w", err)
+		}
+	} else {
+		// Fall back to SQLite
+		log.Info().Msg("Using SQLite as primary storage")
+		repo, err = sqlite.New(cfg.Database.DSN)
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
 	}
 
 	// Run migrations
@@ -263,17 +279,13 @@ func publishDigestCmd() *cobra.Command {
 			limiter := ratelimit.NewDefaultLimiter()
 			aiClient := ai.NewClient(cfg.Anthropic, limiter, log)
 
-			// Get top 3 pending topics by score
-			filter := storage.TopicFilter{
-				MinScore:  &minScore,
-				Limit:     3,
-				OrderBy:   "ai_score",
-				OrderDesc: true,
-			}
-			pendingStatus := models.TopicStatusPending
-			filter.Status = &pendingStatus
+			// Create publisher agent to save the digest
+			oauthManager := linkedin.NewOAuthManagerEnvOnly(cfg.LinkedIn, log)
+			linkedinClient := linkedin.NewClient(oauthManager, limiter, log)
+			agent := publisher.NewAgent(aiClient, linkedinClient, repo, cfg.Publishing, log)
 
-			topics, err := repo.ListTopics(ctx, filter)
+			// Get top 3 topics to show what will be used
+			topics, err := repo.GetTopTopics(ctx, 3, minScore)
 			if err != nil {
 				return fmt.Errorf("failed to get topics: %w", err)
 			}
@@ -282,32 +294,19 @@ func publishDigestCmd() *cobra.Command {
 				return fmt.Errorf("need at least 3 pending topics with score >= %.0f, found %d", minScore, len(topics))
 			}
 
-			// Convert to digest topics
-			digestTopics := make([]ai.DigestTopic, 3)
-			for i, t := range topics[:3] {
-				digestTopics[i] = ai.DigestTopic{
-					Title:       t.Title,
-					Description: t.Description,
-					Source:      t.SourceName,
-				}
-			}
-
 			fmt.Println("Generating digest from top 3 topics:")
-			for i, t := range digestTopics {
-				fmt.Printf("  [%d] %s (%s)\n", i+1, t.Title, t.Source)
+			for i, t := range topics[:3] {
+				fmt.Printf("  [%d] %s (%s)\n", i+1, t.Title, t.SourceName)
 			}
 			fmt.Println()
 
-			// Generate digest
-			digest, err := aiClient.GenerateDigest(ctx, digestTopics, cfg.Publishing.BrandVoice)
+			// Generate and save digest using publisher agent
+			result, err := agent.GenerateDigest(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to generate digest: %w", err)
 			}
 
-			fmt.Printf("=== Daily Digest ===\n\n%s\n", digest.Content)
-			if len(digest.Hashtags) > 0 {
-				fmt.Printf("\nHashtags: %v\n", digest.Hashtags)
-			}
+			fmt.Printf("=== Daily Digest (Post #%d) ===\n\n%s\n", result.Post.ID, result.Preview)
 
 			return nil
 		},

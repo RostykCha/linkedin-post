@@ -99,6 +99,7 @@ sources:
 
 scheduler:
   discovery_cron: "0 */1 * * *"    # Every hour (more frequent for news)
+  digest_cron: "55 7 * * *"        # 7:55am daily - generate digest from top topics
   publish_cron: "0 8 * * *"        # 8am daily - optimal for LinkedIn algorithm engagement
   cleanup_cron: "0 0 * * 0"        # Weekly cleanup on Sunday
 

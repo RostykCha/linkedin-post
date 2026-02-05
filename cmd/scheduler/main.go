@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	"github.com/linkedin-agent/internal/ai"
 	"github.com/linkedin-agent/internal/config"
 	"github.com/linkedin-agent/internal/linkedin"
+	"github.com/linkedin-agent/internal/models"
 	"github.com/linkedin-agent/internal/source"
 	"github.com/linkedin-agent/internal/source/custom"
 	"github.com/linkedin-agent/internal/source/rss"
@@ -144,6 +146,34 @@ func runScheduler(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to schedule discovery job: %w", err)
 	}
 	log.Info().Str("cron", cfg.Scheduler.DiscoveryCron).Msg("Discovery job scheduled")
+
+	// Schedule digest generation job (runs 5 minutes before publish)
+	_, err = c.AddFunc(cfg.Scheduler.DigestCron, func() {
+		ctx := context.Background()
+		log.Info().Msg("Running scheduled digest generation")
+
+		result, err := publisherAgent.GenerateDigest(ctx)
+		if err != nil {
+			log.Error().Err(err).Msg("Scheduled digest generation failed")
+			return
+		}
+
+		// Always schedule the digest for publishing (scheduler = autonomous mode)
+		if result.Post.Status != models.PostStatusScheduled {
+			if err := publisherAgent.SchedulePost(ctx, result.Post.ID, time.Now()); err != nil {
+				log.Error().Err(err).Msg("Failed to schedule digest for publishing")
+				return
+			}
+		}
+
+		log.Info().
+			Uint("post_id", result.Post.ID).
+			Msg("Daily digest generated and scheduled")
+	})
+	if err != nil {
+		return fmt.Errorf("failed to schedule digest job: %w", err)
+	}
+	log.Info().Str("cron", cfg.Scheduler.DigestCron).Msg("Digest job scheduled")
 
 	// Schedule publish job
 	_, err = c.AddFunc(cfg.Scheduler.PublishCron, func() {

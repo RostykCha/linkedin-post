@@ -65,7 +65,7 @@ Your writing style:
 ║    Example: "Tech Insights from Ros | Feb 4, 2026"                            ║
 ║                                                                               ║
 ║ 2. LAST LINES MUST BE THE FOOTER (after hashtags):                            ║
-║    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━                                                ║
+║    ---                                                                        ║
 ║    LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/           ║
 ║    Instagram: https://www.instagram.com/rostislav_cha                         ║
 ║                                                                               ║
@@ -200,7 +200,7 @@ VISUAL LAYOUT RULES (non-negotiable):
 
 STRUCTURE TOOLS:
 • Numbered lists for tips/steps (signals "quick takeaways")
-• NO EMOJIS - use unicode separators (━━━━━) or simple numbering [1], [2], [3]
+• NO EMOJIS - use simple separators (---) or simple numbering [1], [2], [3]
 • "Wave rhythm": vary sentence length (short, longer, short)
 
 LENGTH:
@@ -248,10 +248,10 @@ PROVEN CTAs:
 RULE: Ask ONE clear question, not multiple. Make it easy to answer.
 
 3. FOOTER WITH AUTHOR LINKS (MANDATORY - NEVER SKIP):
-   ⚠️ ALWAYS include this footer AFTER hashtags. This is NOT optional.
+   ALWAYS include this footer AFTER hashtags. This is NOT optional.
 
    Format:
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ---
    LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
    Instagram: https://www.instagram.com/rostislav_cha
 
@@ -304,7 +304,7 @@ Write a LinkedIn post. The content field in your JSON response must start with t
 Tech Insights from Ros | Feb 4, 2026
 
 And must end with these exact lines after the hashtags:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 LinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/
 Instagram: https://www.instagram.com/rostislav_cha
 
@@ -313,7 +313,7 @@ Write from a third-person industry observer perspective. Use phrases like "Devel
 Do not use any emojis.
 
 {
-  "content": "Tech Insights from Ros | Feb 4, 2026\n\n[hook]\n\n[body using third-person perspective]\n\n[insights]\n\n[question for engagement]\n\n#tag1 #tag2 #tag3\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha",
+  "content": "Tech Insights from Ros | Feb 4, 2026\n\n[hook]\n\n[body using third-person perspective]\n\n[insights]\n\n[question for engagement]\n\n#tag1 #tag2 #tag3\n\n---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha",
   "hashtags": ["tag1", "tag2"],
   "hook": "the hook line",
   "cta": "the question"
@@ -382,10 +382,10 @@ DIGEST HOOK FORMULAS:
 
 === FORMATTING RULES (Mobile-First) ===
 
-• Keep total post under 2500 characters
+• CRITICAL: Keep total post under 2000 characters (LinkedIn has 3000 limit, leave room for hashtags/footer)
 • SHORT PARAGRAPHS: 1-2 sentences MAX per paragraph
 • WHITE SPACE: Blank line between EVERY section
-• Use unicode line separators (━━━━━) between news items - NO EMOJIS
+• Use SHORT separators: --- (simple dashes only, NOT unicode characters)
 • Number news items as [1], [2], [3] - NO EMOJIS
 • Source attribution adds credibility: "(via TechCrunch)"
 • End with 3-5 relevant hashtags

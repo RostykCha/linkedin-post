@@ -179,6 +179,8 @@ func (a *Agent) Publish(ctx context.Context, postID uint) (*PublishResult, error
 	a.log.Info().
 		Uint("post_id", postID).
 		Str("post_type", string(post.PostType)).
+		Int("content_length", len(post.Content)).
+		Str("content_start", post.Content[:min(100, len(post.Content))]).
 		Msg("Publishing post")
 
 	// Update status to publishing

@@ -105,6 +105,7 @@ type CustomConfig struct {
 // SchedulerConfig holds scheduler settings
 type SchedulerConfig struct {
 	DiscoveryCron string `mapstructure:"discovery_cron"`
+	DigestCron    string `mapstructure:"digest_cron"`
 	PublishCron   string `mapstructure:"publish_cron"`
 	CleanupCron   string `mapstructure:"cleanup_cron"`
 }
@@ -181,8 +182,12 @@ func Load(configPath string) (*Config, error) {
 	v.BindEnv("linkedin.refresh_token", "LINKEDIN_LINKEDIN_REFRESH_TOKEN")
 	v.BindEnv("database.driver", "LINKEDIN_DATABASE_DRIVER")
 	v.BindEnv("database.dsn", "LINKEDIN_DATABASE_DSN")
+	v.BindEnv("tracker.enabled", "LINKEDIN_TRACKER_ENABLED")
 	v.BindEnv("tracker.spreadsheet_id", "LINKEDIN_TRACKER_SPREADSHEET_ID")
 	v.BindEnv("tracker.credentials_file", "LINKEDIN_TRACKER_CREDENTIALS_FILE")
+	v.BindEnv("tracker.service_account_json", "LINKEDIN_TRACKER_SERVICE_ACCOUNT_JSON")
+	v.BindEnv("publishing.auto_approve", "LINKEDIN_PUBLISHING_AUTO_APPROVE")
+	v.BindEnv("publishing.min_score_threshold", "LINKEDIN_PUBLISHING_MIN_SCORE_THRESHOLD")
 
 	// Read config file (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
@@ -233,6 +238,7 @@ func setDefaults(v *viper.Viper) {
 
 	// Scheduler defaults
 	v.SetDefault("scheduler.discovery_cron", "0 */2 * * *")  // Every 2 hours
+	v.SetDefault("scheduler.digest_cron", "55 7 * * *")      // 7:55am daily - generate digest before publish
 	v.SetDefault("scheduler.publish_cron", "0 8 * * *")      // 8am daily - optimal LinkedIn engagement
 	v.SetDefault("scheduler.cleanup_cron", "0 0 * * 0")      // Weekly cleanup
 

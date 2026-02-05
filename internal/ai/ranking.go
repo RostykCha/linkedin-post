@@ -150,7 +150,7 @@ func postProcessContent(content string) string {
 	// Generate header with today's date
 	today := time.Now().Format("Jan 2, 2006")
 	header := "Tech Insights from Ros | " + today
-	footer := "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
+	footer := "---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
 
 	// Always ensure correct header with today's date
 	if strings.HasPrefix(content, "Tech Insights from Ros") {
@@ -301,6 +301,32 @@ type GeneratedDigest struct {
 	CTA      string   `json:"cta"`
 }
 
+// postProcessDigestContent ensures header and footer are present with correct date
+func postProcessDigestContent(content string) string {
+	today := time.Now().Format("Jan 2, 2006")
+	header := "Daily Updates from Ros - " + today
+	footer := "---\nLinkedIn: https://www.linkedin.com/in/qa-lead-rostyslav-chabria/\nInstagram: https://www.instagram.com/rostislav_cha"
+
+	// Replace unicode box-drawing characters with simple dashes
+	content = strings.ReplaceAll(content, "━", "-")
+
+	// Fix header with correct date
+	if strings.HasPrefix(content, "Daily Updates from Ros") {
+		if idx := strings.Index(content, "\n"); idx != -1 {
+			content = header + content[idx:]
+		}
+	} else {
+		content = header + "\n\n" + content
+	}
+
+	// Ensure footer is present
+	if !strings.Contains(content, "linkedin.com/in/qa-lead-rostyslav-chabria") {
+		content = strings.TrimSpace(content) + "\n\n" + footer
+	}
+
+	return content
+}
+
 // GenerateDigest creates a daily news digest post from top 3 topics
 func (c *Client) GenerateDigest(ctx context.Context, topics []DigestTopic, brandVoice string) (*GeneratedDigest, error) {
 	if len(topics) < 3 {
@@ -328,6 +354,9 @@ func (c *Client) GenerateDigest(ctx context.Context, topics []DigestTopic, brand
 			Msg("Failed to parse digest response")
 		return nil, fmt.Errorf("failed to parse digest response: %w", err)
 	}
+
+	// Post-process to ensure correct date in header and footer
+	digest.Content = postProcessDigestContent(digest.Content)
 
 	return &digest, nil
 }
