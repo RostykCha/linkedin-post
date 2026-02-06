@@ -116,6 +116,45 @@ func (r *Repository) CreateTopic(ctx context.Context, topic *models.Topic) error
 	return r.appendRow(ctx, topicsSheetName, row)
 }
 
+// CreateTopicsBatch creates multiple topics in a single API call to avoid rate limits
+func (r *Repository) CreateTopicsBatch(ctx context.Context, topics []*models.Topic) (int, error) {
+	if len(topics) == 0 {
+		return 0, nil
+	}
+
+	// Assign IDs and prepare rows
+	r.mu.Lock()
+	rows := make([][]interface{}, 0, len(topics))
+	now := time.Now()
+	for _, topic := range topics {
+		topic.ID = r.nextTopicID
+		r.nextTopicID++
+		if topic.DiscoveredAt.IsZero() {
+			topic.DiscoveredAt = now
+		}
+		topic.UpdatedAt = now
+		rows = append(rows, topicToRow(topic))
+	}
+	r.mu.Unlock()
+
+	// Batch append all topics in a single API call
+	appendRange := fmt.Sprintf("%s!A:Z", topicsSheetName)
+	valueRange := &sheets.ValueRange{
+		Values: rows,
+	}
+
+	_, err := r.service.Spreadsheets.Values.Append(r.spreadsheetID, appendRange, valueRange).
+		ValueInputOption("RAW").
+		InsertDataOption("INSERT_ROWS").
+		Context(ctx).
+		Do()
+	if err != nil {
+		return 0, fmt.Errorf("failed to batch append topics: %w", err)
+	}
+
+	return len(topics), nil
+}
+
 // GetTopicByID retrieves a topic by its ID
 func (r *Repository) GetTopicByID(ctx context.Context, id uint) (*models.Topic, error) {
 	topics, err := r.readAllTopics(ctx)

@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/linkedin-agent/internal/ai"
@@ -11,6 +12,8 @@ import (
 	"github.com/linkedin-agent/internal/storage"
 	"github.com/linkedin-agent/pkg/logger"
 )
+
+const maxTopicsToSave = 10
 
 // Agent handles daily IT/tech news discovery from multiple sources
 type Agent struct {
@@ -80,17 +83,26 @@ func (a *Agent) Run(ctx context.Context) (*DiscoveryResult, error) {
 	result.Errors = append(result.Errors, rankErrors...)
 	result.TopicsRanked = len(rankedTopics)
 
-	// Step 4: Save topics to database
-	for _, topic := range rankedTopics {
-		if err := a.repository.CreateTopic(ctx, topic); err != nil {
-			a.log.Warn().
-				Err(err).
-				Str("title", topic.Title).
-				Msg("Failed to save topic")
-			result.TopicsSkipped++
-		} else {
-			result.TopicsSaved++
-		}
+	// Step 4: Sort by score and keep only top N topics
+	sort.Slice(rankedTopics, func(i, j int) bool {
+		return rankedTopics[i].AIScore > rankedTopics[j].AIScore
+	})
+	if len(rankedTopics) > maxTopicsToSave {
+		a.log.Info().
+			Int("total_ranked", len(rankedTopics)).
+			Int("keeping", maxTopicsToSave).
+			Msg("Limiting to top topics")
+		rankedTopics = rankedTopics[:maxTopicsToSave]
+	}
+
+	// Step 5: Save topics to database using batch insert to avoid API rate limits
+	saved, err := a.repository.CreateTopicsBatch(ctx, rankedTopics)
+	if err != nil {
+		a.log.Error().Err(err).Msg("Failed to batch save topics")
+		result.Errors = append(result.Errors, fmt.Errorf("batch save failed: %w", err))
+		result.TopicsSkipped = len(rankedTopics)
+	} else {
+		result.TopicsSaved = saved
 	}
 
 	result.Duration = time.Since(startTime)
@@ -213,13 +225,22 @@ func (a *Agent) RunForSource(ctx context.Context, sourceName string) (*Discovery
 	result.Errors = rankErrors
 	result.TopicsRanked = len(rankedTopics)
 
-	// Save
-	for _, topic := range rankedTopics {
-		if err := a.repository.CreateTopic(ctx, topic); err != nil {
-			result.TopicsSkipped++
-		} else {
-			result.TopicsSaved++
-		}
+	// Sort by score and keep only top N topics
+	sort.Slice(rankedTopics, func(i, j int) bool {
+		return rankedTopics[i].AIScore > rankedTopics[j].AIScore
+	})
+	if len(rankedTopics) > maxTopicsToSave {
+		rankedTopics = rankedTopics[:maxTopicsToSave]
+	}
+
+	// Save using batch insert
+	saved, err := a.repository.CreateTopicsBatch(ctx, rankedTopics)
+	if err != nil {
+		a.log.Error().Err(err).Msg("Failed to batch save topics")
+		result.Errors = append(result.Errors, fmt.Errorf("batch save failed: %w", err))
+		result.TopicsSkipped = len(rankedTopics)
+	} else {
+		result.TopicsSaved = saved
 	}
 
 	result.Duration = time.Since(startTime)

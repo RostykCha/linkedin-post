@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"time"
@@ -173,14 +174,21 @@ func (c *Client) GetAttribution(photo *Photo) string {
 	return fmt.Sprintf("Photo by %s on Unsplash", photo.User.Name)
 }
 
-// GetBestPhoto searches and returns the best matching photo for a query
+// GetBestPhoto searches and returns a random photo from top results for variety
 func (c *Client) GetBestPhoto(ctx context.Context, query string) (*Photo, error) {
-	photos, err := c.SearchPhotos(ctx, query, 1)
+	photos, err := c.SearchPhotos(ctx, query, 10)
 	if err != nil {
 		return nil, err
 	}
 	if len(photos) == 0 {
 		return nil, fmt.Errorf("no photos found for query: %s", query)
 	}
-	return &photos[0], nil
+	// Randomly select from top results to avoid using the same image repeatedly
+	idx := rand.Intn(len(photos))
+	c.log.Debug().
+		Int("total_results", len(photos)).
+		Int("selected_index", idx).
+		Str("photo_id", photos[idx].ID).
+		Msg("Randomly selected photo from search results")
+	return &photos[idx], nil
 }

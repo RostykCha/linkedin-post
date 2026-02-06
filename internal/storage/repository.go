@@ -11,6 +11,7 @@ import (
 type Repository interface {
 	// Topic operations
 	CreateTopic(ctx context.Context, topic *models.Topic) error
+	CreateTopicsBatch(ctx context.Context, topics []*models.Topic) (int, error) // Returns count of created topics
 	GetTopicByID(ctx context.Context, id uint) (*models.Topic, error)
 	GetTopicByExternalID(ctx context.Context, externalID string) (*models.Topic, error)
 	ListTopics(ctx context.Context, filter TopicFilter) ([]*models.Topic, error)

@@ -67,6 +67,16 @@ func (r *Repository) CreateTopic(ctx context.Context, topic *models.Topic) error
 	return r.db.WithContext(ctx).Create(topic).Error
 }
 
+func (r *Repository) CreateTopicsBatch(ctx context.Context, topics []*models.Topic) (int, error) {
+	if len(topics) == 0 {
+		return 0, nil
+	}
+	if err := r.db.WithContext(ctx).CreateInBatches(topics, 100).Error; err != nil {
+		return 0, fmt.Errorf("failed to batch create topics: %w", err)
+	}
+	return len(topics), nil
+}
+
 func (r *Repository) GetTopicByID(ctx context.Context, id uint) (*models.Topic, error) {
 	var topic models.Topic
 	if err := r.db.WithContext(ctx).First(&topic, id).Error; err != nil {
